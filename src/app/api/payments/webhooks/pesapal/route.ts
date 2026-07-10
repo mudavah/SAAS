@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/db";
 import { payments, invoices, paymentWebhookLogs } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -10,20 +11,38 @@ import { toCents, fromCents } from "@/lib/money";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
     const reference = (body as any)?.order_tracking_id as string | undefined;
 
-    const authError = await requireWebhookSecret(req, "pesapal", reference);
+    const authError = await requireWebhookSecret(req, "pesapal", reference, rawBody);
     if (authError) return authError;
 
     const webhookEvent = await processWebhook("pesapal", body);
 
-    const [log] = await db.insert(paymentWebhookLogs).values({
+    const dedupeKey = crypto.createHash("sha256").update(`pesapal:${reference || webhookEvent.paymentId || "unknown"}`).digest("hex");
+
+    const sanitizedPayload = {
+      type: webhookEvent.type,
+      reference: reference || null,
+      amount: webhookEvent.amount ?? null,
+      status: webhookEvent.status,
+      receivedAt: new Date().toISOString(),
+    };
+
+    const inserted = await db.insert(paymentWebhookLogs).values({
       provider: "pesapal",
       eventType: webhookEvent.type,
-      payload: body as Record<string, unknown>,
+      payload: sanitizedPayload as Record<string, unknown>,
+      dedupeKey,
       processed: false,
-    }).returning();
+    }).onConflictDoNothing({ target: paymentWebhookLogs.dedupeKey }).returning();
+
+    if (inserted.length === 0) {
+      return NextResponse.json({ received: true });
+    }
+
+    const [log] = inserted;
 
     if (webhookEvent.type === "payment.completed" && webhookEvent.paymentId) {
       const payment = await db.query.payments.findFirst({
@@ -56,8 +75,11 @@ export async function POST(req: Request) {
         { userId: payment.userId, organizationId: payment.organizationId }
       );
 
-      // Only settle when the provider has actually confirmed completion.
       if (result.success && result.status === "completed") {
+        await db.update(paymentWebhookLogs)
+          .set({ processed: true, processedAt: new Date() })
+          .where(eq(paymentWebhookLogs.id, log.id));
+
         await db
           .update(payments)
           .set({ status: "completed", paidAt: new Date() })
@@ -105,15 +127,15 @@ export async function POST(req: Request) {
           priority: "high",
           deepLink: "/dashboard/payments",
         });
-
-        await db.update(paymentWebhookLogs)
-          .set({ processed: true, processedAt: new Date() })
-          .where(eq(paymentWebhookLogs.id, log.id));
       } else {
         await db.update(paymentWebhookLogs)
           .set({ processed: true, processedAt: new Date(), error: result.error })
           .where(eq(paymentWebhookLogs.id, log.id));
       }
+    } else {
+      await db.update(paymentWebhookLogs)
+        .set({ processed: true, processedAt: new Date() })
+        .where(eq(paymentWebhookLogs.id, log.id));
     }
 
     return NextResponse.json({ received: true });

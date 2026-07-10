@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
+import crypto from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users, organizations, payments, invoices, paymentWebhookLogs } from "@/db/schema";
@@ -37,12 +38,29 @@ export async function POST(req: Request) {
 
   const webhookEvent = await processWebhook("stripe", event);
 
-  const [log] = await db.insert(paymentWebhookLogs).values({
+  const dedupeKey = crypto.createHash("sha256").update(`stripe:${(event as any).id || webhookEvent.id || "unknown"}`).digest("hex");
+
+  const sanitizedPayload = {
+    type: webhookEvent.type,
+    reference: webhookEvent.paymentId || null,
+    amount: webhookEvent.amount ?? null,
+    status: webhookEvent.status,
+    receivedAt: new Date().toISOString(),
+  };
+
+  const inserted = await db.insert(paymentWebhookLogs).values({
     provider: "stripe",
     eventType: webhookEvent.type,
-    payload: event as unknown as Record<string, unknown>,
+    payload: sanitizedPayload as Record<string, unknown>,
+    dedupeKey,
     processed: false,
-  }).returning({ id: paymentWebhookLogs.id });
+  }).onConflictDoNothing({ target: paymentWebhookLogs.dedupeKey }).returning({ id: paymentWebhookLogs.id });
+
+  if (inserted.length === 0) {
+    return NextResponse.json({ received: true });
+  }
+
+  const [log] = inserted;
 
   try {
     switch (event.type) {
@@ -123,6 +141,10 @@ export async function POST(req: Request) {
             );
 
             if (result.success) {
+              await db.update(paymentWebhookLogs)
+                .set({ processed: true, processedAt: new Date() })
+                .where(eq(paymentWebhookLogs.id, log.id));
+
               await db
                 .update(payments)
                 .set({ status: "completed", paidAt: new Date(), stripePaymentId: webhookEvent.paymentId })
