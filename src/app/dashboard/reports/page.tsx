@@ -1,25 +1,27 @@
-import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { payments, expenses, invoices } from "@/db/schema";
 import { eq, and, gte, sum, count } from "drizzle-orm";
+import { getPageContext } from "@/lib/session";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function ReportsPage() {
-  const session = await auth();
-  const userId = session!.user!.id;
+  const ctx = await getPageContext();
+  if (!ctx) redirect("/login");
+  const organizationId = ctx.organizationId;
   const startOfYear = new Date(new Date().getFullYear(), 0, 1);
 
   const [revenue, totalExpenses, invoiceStats, taxDeductible] = await Promise.all([
     db.select({ total: sum(payments.amount) }).from(payments)
-      .where(and(eq(payments.userId, userId), eq(payments.status, "completed"), gte(payments.createdAt, startOfYear))),
+      .where(and(eq(payments.organizationId, organizationId), eq(payments.status, "completed"), gte(payments.createdAt, startOfYear))),
     db.select({ total: sum(expenses.amount) }).from(expenses)
-      .where(and(eq(expenses.userId, userId), gte(expenses.date, startOfYear))),
+      .where(and(eq(expenses.organizationId, organizationId), gte(expenses.date, startOfYear))),
     db.select({ count: count(), total: sum(invoices.total) }).from(invoices)
-      .where(and(eq(invoices.userId, userId), gte(invoices.createdAt, startOfYear))),
+      .where(and(eq(invoices.organizationId, organizationId), gte(invoices.createdAt, startOfYear))),
     db.select({ total: sum(expenses.amount) }).from(expenses)
-      .where(and(eq(expenses.userId, userId), eq(expenses.taxDeductible, true), gte(expenses.date, startOfYear))),
+      .where(and(eq(expenses.organizationId, organizationId), eq(expenses.taxDeductible, true), gte(expenses.date, startOfYear))),
   ]);
 
   const rev = parseFloat(revenue[0]?.total || "0");

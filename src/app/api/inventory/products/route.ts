@@ -83,8 +83,33 @@ export async function POST(req: Request) {
       isActive: parsed.data.isActive,
     };
 
-    if (parsed.data.categoryId) values.categoryId = parsed.data.categoryId;
-    if (parsed.data.brandId) values.brandId = parsed.data.brandId;
+    // Validate any referenced category/brand belongs to this organization.
+    if (parsed.data.categoryId) {
+      const cat = await db.query.inventoryCategories.findFirst({
+        where: and(
+          eq(inventoryCategories.id, parsed.data.categoryId),
+          eq(inventoryCategories.organizationId, ctx.organizationId)
+        ),
+        columns: { id: true },
+      });
+      if (!cat) {
+        return NextResponse.json({ error: "Category not found" }, { status: 404 });
+      }
+      values.categoryId = parsed.data.categoryId;
+    }
+    if (parsed.data.brandId) {
+      const brand = await db.query.inventoryBrands.findFirst({
+        where: and(
+          eq(inventoryBrands.id, parsed.data.brandId),
+          eq(inventoryBrands.organizationId, ctx.organizationId)
+        ),
+        columns: { id: true },
+      });
+      if (!brand) {
+        return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+      }
+      values.brandId = parsed.data.brandId;
+    }
     if (parsed.data.sku !== undefined) values.sku = parsed.data.sku || null;
     if (parsed.data.barcode !== undefined) values.barcode = parsed.data.barcode || null;
     if (parsed.data.description !== undefined) values.description = parsed.data.description || null;

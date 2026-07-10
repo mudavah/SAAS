@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { tasks } from "@/db/schema";
+import { tasks, projects } from "@/db/schema";
 import { taskSchema } from "@/lib/validations";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 
@@ -35,13 +35,28 @@ export async function POST(req: Request) {
       );
     }
 
+    const { projectId } = parsed.data;
+
+    if (projectId) {
+      const project = await db.query.projects.findFirst({
+        where: and(
+          eq(projects.id, projectId),
+          eq(projects.organizationId, ctx.organizationId)
+        ),
+        columns: { id: true },
+      });
+      if (!project) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      }
+    }
+
     const [task] = await db
       .insert(tasks)
       .values({
         organizationId: ctx.organizationId,
         userId: ctx.userId!,
         ...parsed.data,
-        projectId: parsed.data.projectId || null,
+        projectId: projectId || null,
       })
       .returning();
 

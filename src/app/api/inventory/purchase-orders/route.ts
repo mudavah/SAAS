@@ -63,6 +63,36 @@ export async function POST(req: Request) {
       })
       .returning();
 
+    // Validate that the referenced supplier (if any) and every line-item product
+    // belong to this organization before persisting.
+    if (parsed.data.supplierId) {
+      const supplier = await db.query.inventorySuppliers.findFirst({
+        where: and(
+          eq(inventorySuppliers.id, parsed.data.supplierId),
+          eq(inventorySuppliers.organizationId, ctx.organizationId)
+        ),
+        columns: { id: true },
+      });
+      if (!supplier) {
+        return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
+      }
+    }
+
+    const productIds = parsed.data.items.map((i) => i.productId);
+    const validProducts = await db.query.inventoryProducts.findMany({
+      where: and(
+        eq(inventoryProducts.organizationId, ctx.organizationId)
+      ),
+      columns: { id: true },
+    });
+    const validProductIds = new Set(validProducts.map((p) => p.id));
+    const invalidProduct = parsed.data.items.find(
+      (i) => !validProductIds.has(i.productId)
+    );
+    if (invalidProduct) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
     const items = parsed.data.items.map((item) => ({
       organizationId: ctx.organizationId,
       purchaseOrderId: order.id,

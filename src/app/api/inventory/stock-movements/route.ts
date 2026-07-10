@@ -76,6 +76,7 @@ export async function POST(req: Request) {
 
     const stockResult = await db.query.inventoryStock.findFirst({
       where: and(
+        eq(inventoryStock.organizationId, ctx.organizationId),
         eq(inventoryStock.productId, parsed.data.productId),
         eq(inventoryStock.warehouseId, parsed.data.warehouseId)
       ),

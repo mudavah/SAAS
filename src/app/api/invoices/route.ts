@@ -67,6 +67,24 @@ export async function POST(req: Request) {
 
     const { items, ...invoiceData } = parsed.data;
 
+    // Validate that any referenced client belongs to this organization to
+    // prevent linking an invoice to another tenant's client.
+    if (invoiceData.clientId) {
+      const client = await db.query.clients.findFirst({
+        where: and(
+          eq(clients.id, invoiceData.clientId),
+          eq(clients.organizationId, ctx.organizationId)
+        ),
+        columns: { id: true },
+      });
+      if (!client) {
+        return NextResponse.json(
+          { error: "Client not found" },
+          { status: 404 }
+        );
+      }
+    }
+
     const subtotal = items.reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
       0

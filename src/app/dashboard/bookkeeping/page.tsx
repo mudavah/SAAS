@@ -1,7 +1,8 @@
-import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { chartOfAccounts, journalEntries } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getPageContext } from "@/lib/session";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { BookOpen, FileText, ArrowUpRight, Plus, Wallet } from "lucide-react";
 
-async function getBookkeepingStats(userId: string) {
+async function getBookkeepingStats(organizationId: string) {
   const [accounts, entries] = await Promise.all([
-    db.select().from(chartOfAccounts).where(eq(chartOfAccounts.userId, userId)),
-    db.select().from(journalEntries).where(eq(journalEntries.userId, userId)),
+    db.select().from(chartOfAccounts).where(eq(chartOfAccounts.organizationId, organizationId)),
+    db.select().from(journalEntries).where(eq(journalEntries.organizationId, organizationId)),
   ]);
 
   const totalDebit = entries.reduce((sum, entry) => {
@@ -28,8 +29,9 @@ async function getBookkeepingStats(userId: string) {
 }
 
 export default async function BookkeepingPage() {
-  const session = await auth();
-  const stats = await getBookkeepingStats(session!.user!.id);
+  const ctx = await getPageContext();
+  if (!ctx) redirect("/login");
+  const stats = await getBookkeepingStats(ctx.organizationId);
 
   return (
     <DashboardShell>

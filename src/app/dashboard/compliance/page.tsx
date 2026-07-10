@@ -1,7 +1,8 @@
-import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { etimsConfig, etimsInvoices, invoices } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { getPageContext } from "@/lib/session";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,13 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Shield, CheckCircle, XCircle, Clock, Settings, AlertTriangle } from "lucide-react";
 
-async function getComplianceStats(userId: string) {
+async function getComplianceStats(organizationId: string) {
   const [config, etimsRecords] = await Promise.all([
     db.query.etimsConfig.findFirst({
-      where: eq(etimsConfig.userId, userId),
+      where: eq(etimsConfig.organizationId, organizationId),
     }),
     db.query.etimsInvoices.findMany({
-      where: eq(etimsInvoices.userId, userId),
+      where: eq(etimsInvoices.organizationId, organizationId),
       orderBy: (records) => [desc(records.createdAt)],
       limit: 5,
       with: {
@@ -45,8 +46,9 @@ async function getComplianceStats(userId: string) {
 }
 
 export default async function CompliancePage() {
-  const session = await auth();
-  const stats = await getComplianceStats(session!.user!.id);
+  const ctx = await getPageContext();
+  if (!ctx) redirect("/login");
+  const stats = await getComplianceStats(ctx.organizationId);
 
   return (
     <DashboardShell>

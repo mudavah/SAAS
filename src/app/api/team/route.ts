@@ -11,7 +11,7 @@ import { sendInviteEmail } from "@/lib/email";
 import { randomBytes } from "crypto";
 import { getApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
-import type { PermissionKey } from "@/lib/rbac";
+import { SYSTEM_ROLES, type PermissionKey, type SystemRole } from "@/lib/rbac/permissions";
 
 const MANAGE_TEAM: PermissionKey = "team.manage";
 
@@ -40,6 +40,18 @@ export async function POST(req: NextRequest) {
   const { email, roleType = "employee" } = body as { email: string; roleType?: string };
 
   if (!email) return NextResponse.json({ error: "Email is required" }, { status: 400 });
+
+  if (!SYSTEM_ROLES.includes(roleType as SystemRole)) {
+    return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+  }
+
+  // Only an owner may grant the owner role (prevents privilege escalation).
+  if (roleType === "owner" && ctx.roleType !== "owner") {
+    return NextResponse.json(
+      { error: "Only an owner can assign the owner role" },
+      { status: 403 }
+    );
+  }
 
   const existingUser = await db.query.users.findFirst({
     where: eq(users.email, email),

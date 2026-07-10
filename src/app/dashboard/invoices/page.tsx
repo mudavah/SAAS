@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { invoices } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { getPageContext } from "@/lib/session";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +21,11 @@ const statusColors: Record<string, "default" | "success" | "warning" | "destruct
 };
 
 export default async function InvoicesPage() {
-  const session = await auth();
+  const ctx = await getPageContext();
+  if (!ctx) redirect("/login");
+
   const userInvoices = await db.query.invoices.findMany({
-    where: eq(invoices.userId, session!.user!.id),
+    where: eq(invoices.organizationId, ctx.organizationId),
     orderBy: [desc(invoices.createdAt)],
     with: { client: true },
   });

@@ -1,7 +1,8 @@
-import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { inventoryProducts, inventoryStock, inventoryStockMovements, usageRecords } from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
+import { getPageContext } from "@/lib/session";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,17 +11,17 @@ import Link from "next/link";
 import { Package, AlertTriangle, ArrowUpRight, TrendingUp, Plus, Boxes } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
-async function getInventoryStats(userId: string) {
+async function getInventoryStats(organizationId: string) {
   const [totalProducts, lowStockProducts, totalStockValue, recentMovements] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(inventoryProducts).where(eq(inventoryProducts.userId, userId)),
+    db.select({ count: sql<number>`count(*)` }).from(inventoryProducts).where(eq(inventoryProducts.organizationId, organizationId)),
     db.select({ count: sql<number>`count(*)` }).from(inventoryProducts)
       .innerJoin(inventoryStock, eq(inventoryStock.productId, inventoryProducts.id))
-      .where(and(eq(inventoryProducts.userId, userId), sql`${inventoryStock.quantity} <= ${inventoryProducts.minStockLevel}`)),
+      .where(and(eq(inventoryProducts.organizationId, organizationId), sql`${inventoryStock.quantity} <= ${inventoryProducts.minStockLevel}`)),
     db.select({ total: sql<string>`sum(${inventoryStock.quantity} * ${inventoryProducts.costPrice})` }).from(inventoryStock)
       .innerJoin(inventoryProducts, eq(inventoryStock.productId, inventoryProducts.id))
-      .where(eq(inventoryProducts.userId, userId)),
+      .where(eq(inventoryProducts.organizationId, organizationId)),
     db.select().from(inventoryStockMovements)
-      .where(eq(inventoryStockMovements.userId, userId))
+      .where(eq(inventoryStockMovements.organizationId, organizationId))
       .orderBy((movements) => [desc(movements.createdAt)])
       .limit(10),
   ]);
@@ -34,8 +35,9 @@ async function getInventoryStats(userId: string) {
 }
 
 export default async function InventoryPage() {
-  const session = await auth();
-  const stats = await getInventoryStats(session!.user!.id);
+  const ctx = await getPageContext();
+  if (!ctx) redirect("/login");
+  const stats = await getInventoryStats(ctx.organizationId);
 
   return (
     <DashboardShell>
