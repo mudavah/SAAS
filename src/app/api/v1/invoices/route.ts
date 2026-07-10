@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { invoices, invoiceItems } from "@/db/schema";
+import { clients, invoices, invoiceItems, usageRecords } from "@/db/schema";
 import { invoiceSchema } from "@/lib/validations";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import {
   handleApi,
   type ServerContext,
@@ -40,13 +40,17 @@ export async function POST(req: Request) {
 
       const plan = (ctx.organization.plan || "free") as keyof typeof PLAN_LIMITS;
       const limits = PLAN_LIMITS[plan];
+
       if (limits.invoicesPerMonth !== Infinity) {
         const month = getCurrentMonth();
-        const count = await db.$count(
-          invoices,
-          eq(invoices.organizationId, ctx.organizationId)
-        );
-        if (count >= limits.invoicesPerMonth) {
+        const usage = await db.query.usageRecords.findFirst({
+          where: and(
+            eq(usageRecords.organizationId, ctx.organizationId),
+            eq(usageRecords.month, month)
+          ),
+        });
+
+        if (usage && usage.invoicesCreated >= limits.invoicesPerMonth) {
           return NextResponse.json(
             { error: "Plan invoice limit reached." },
             { status: 403, headers: getCorsHeaders(req) }
@@ -55,6 +59,23 @@ export async function POST(req: Request) {
       }
 
       const { items, ...invoiceData } = parsed.data;
+
+      if (invoiceData.clientId) {
+        const client = await db.query.clients.findFirst({
+          where: and(
+            eq(clients.id, invoiceData.clientId),
+            eq(clients.organizationId, ctx.organizationId)
+          ),
+          columns: { id: true },
+        });
+        if (!client) {
+          return NextResponse.json(
+            { error: "Client not found" },
+            { status: 404, headers: getCorsHeaders(req) }
+          );
+        }
+      }
+
       const subtotal = items.reduce(
         (s, i) => s + i.quantity * i.unitPrice,
         0
@@ -93,6 +114,30 @@ export async function POST(req: Request) {
           sortOrder: index,
         }))
       );
+
+      if (limits.invoicesPerMonth !== Infinity) {
+        const month = getCurrentMonth();
+        const existingUsage = await db.query.usageRecords.findFirst({
+          where: and(
+            eq(usageRecords.organizationId, ctx.organizationId),
+            eq(usageRecords.month, month)
+          ),
+        });
+
+        if (existingUsage) {
+          await db
+            .update(usageRecords)
+            .set({ invoicesCreated: existingUsage.invoicesCreated + 1 })
+            .where(eq(usageRecords.id, existingUsage.id));
+        } else {
+          await db.insert(usageRecords).values({
+            organizationId: ctx.organizationId,
+            userId: ctx.userId!,
+            month,
+            invoicesCreated: 1,
+          });
+        }
+      }
 
       return NextResponse.json(
         { invoice },
