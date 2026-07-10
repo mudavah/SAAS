@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users, organizations } from "@/db/schema";
 import { stripe, planFromPriceId } from "@/lib/stripe";
+import { processWebhook } from "@/lib/payments/engine";
 import type Stripe from "stripe";
 import type { PlanType } from "@/lib/utils";
 
@@ -33,6 +34,8 @@ export async function POST(req: Request) {
   }
 
   try {
+    await processWebhook("stripe", event);
+
     switch (event.type) {
       case "checkout.session.completed": {
         const checkoutSession = event.data.object as Stripe.Checkout.Session;

@@ -23,6 +23,8 @@ import {
   Users2,
   Bell,
   FileSearch,
+  Wallet,
+  Link2,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,8 @@ const navItems = [
   { href: "/dashboard/invoices", label: "Invoices", icon: FileText },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+  { href: "/dashboard/payments/links", label: "Payment Links", icon: Link2 },
+  { href: "/dashboard/payments/subscriptions", label: "Subscriptions", icon: Wallet },
   { href: "/dashboard/expenses", label: "Expenses", icon: Receipt },
   { href: "/dashboard/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/dashboard/ai", label: "AI Assistant", icon: Sparkles },

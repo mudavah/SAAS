@@ -9,6 +9,7 @@ import {
   ALL_PERMISSION_KEYS,
   PERMISSIONS,
   SYSTEM_ROLE_PERMISSIONS,
+  SYSTEM_ROLES,
   type PermissionKey,
   type SystemRole,
 } from "./permissions";
@@ -77,5 +78,5 @@ export function isPermissionKey(value: string): value is PermissionKey {
   return value in PERMISSIONS;
 }
 
-export { ALL_PERMISSION_KEYS, PERMISSIONS };
+export { ALL_PERMISSION_KEYS, PERMISSIONS, SYSTEM_ROLES };
 export type { PermissionKey, SystemRole };

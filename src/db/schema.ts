@@ -30,12 +30,26 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "cash",
   "bank_transfer",
   "other",
+  "pesapal",
 ]);
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
   "completed",
   "failed",
   "refunded",
+]);
+export const paymentLinkTypeEnum = pgEnum("payment_link_type", [
+  "invoice",
+  "deposit",
+  "custom_amount",
+  "subscription",
+]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "trialing",
+  "past_due",
+  "cancelled",
+  "incomplete",
 ]);
 export const taskStatusEnum = pgEnum("task_status", [
   "todo",
@@ -390,9 +404,129 @@ export const payments = pgTable("payments", {
   mpesaReceipt: text("mpesa_receipt"),
   mpesaPhone: text("mpesa_phone"),
   stripePaymentId: text("stripe_payment_id"),
+  providerPaymentId: text("provider_payment_id"),
+  providerStatus: text("provider_status"),
+  providerMetadata: jsonb("provider_metadata").$type<Record<string, unknown>>(),
   notes: text("notes"),
   paidAt: timestamp("paid_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// Payment Providers Configuration
+export const paymentProviderConfigs = pgTable("payment_provider_configs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  apiKey: text("api_key"),
+  apiSecret: text("api_secret"),
+  webhookSecret: text("webhook_secret"),
+  shortcode: text("shortcode"),
+  passkey: text("passkey"),
+  callbackUrl: text("callback_url"),
+  environment: text("environment").default("sandbox").notNull(),
+  merchantId: text("merchant_id"),
+  settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// Payment Links
+export const paymentLinks = pgTable("payment_links", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: paymentLinkTypeEnum("type").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }),
+  currency: text("currency").default("KES").notNull(),
+  description: text("description"),
+  invoiceId: text("invoice_id").references(() => invoices.id, {
+    onDelete: "set null",
+  }),
+  clientId: text("client_id").references(() => clients.id, {
+    onDelete: "set null",
+  }),
+  provider: text("provider").default("mpesa").notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  maxUses: integer("max_uses"),
+  useCount: integer("use_count").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  slug: text("slug").notNull().unique(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// Subscriptions
+export const subscriptions = pgTable("subscriptions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  plan: text("plan").notNull(),
+  status: subscriptionStatusEnum("status").default("active").notNull(),
+  provider: text("provider").default("stripe").notNull(),
+  providerSubscriptionId: text("provider_subscription_id"),
+  currentPeriodStart: timestamp("current_period_start", { mode: "date" }),
+  currentPeriodEnd: timestamp("current_period_end", { mode: "date" }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
+  trialEnd: timestamp("trial_end", { mode: "date" }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// Payment Transactions Log
+export const paymentTransactions = pgTable("payment_transactions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  paymentId: text("payment_id")
+    .notNull()
+    .references(() => payments.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  provider: text("provider").notNull(),
+  providerTransactionId: text("provider_transaction_id"),
+  type: text("type").notNull(),
+  status: text("status").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }),
+  currency: text("currency"),
+  rawRequest: jsonb("raw_request").$type<Record<string, unknown>>(),
+  rawResponse: jsonb("raw_response").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// Payment Webhooks Log
+export const paymentWebhookLogs = pgTable("payment_webhook_logs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  provider: text("provider").notNull(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  signature: text("signature"),
+  processed: boolean("processed").default(false).notNull(),
+  error: text("error"),
+  receivedAt: timestamp("received_at", { mode: "date" }).defaultNow().notNull(),
+  processedAt: timestamp("processed_at", { mode: "date" }),
 });
 
 // Expenses
@@ -1407,6 +1541,55 @@ export const apiUsageRelations = relations(apiUsage, ({ one }) => ({
   }),
 }));
 
+// Payment engine relations
+export const paymentProviderConfigsRelations = relations(paymentProviderConfigs, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [paymentProviderConfigs.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const paymentLinksRelations = relations(paymentLinks, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [paymentLinks.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [paymentLinks.userId],
+    references: [users.id],
+  }),
+  invoice: one(invoices, {
+    fields: [paymentLinks.invoiceId],
+    references: [invoices.id],
+  }),
+  client: one(clients, {
+    fields: [paymentLinks.clientId],
+    references: [clients.id],
+  }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [subscriptions.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [subscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const paymentTransactionsRelations = relations(paymentTransactions, ({ one }) => ({
+  payment: one(payments, {
+    fields: [paymentTransactions.paymentId],
+    references: [payments.id],
+  }),
+  organization: one(organizations, {
+    fields: [paymentTransactions.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 // Types
 export type User = typeof users.$inferSelect;
 export type Business = typeof businesses.$inferSelect;
@@ -1446,6 +1629,13 @@ export type NotificationPreference = typeof notificationPreferences.$inferSelect
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type ApiUsage = typeof apiUsage.$inferSelect;
 
+// Payment engine types
+export type PaymentProviderConfig = typeof paymentProviderConfigs.$inferSelect;
+export type PaymentLink = typeof paymentLinks.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type PaymentWebhookLog = typeof paymentWebhookLogs.$inferSelect;
+
 // Enterprise foundation enums (TypeScript unions)
 export type RoleType = (typeof roleTypeEnum.enumValues)[number];
 export type MemberStatus = (typeof memberStatusEnum.enumValues)[number];
@@ -1457,3 +1647,5 @@ export type NotificationCategory =
 export type NotificationPriority =
   (typeof notificationPriorityEnum.enumValues)[number];
 export type ApiKeyStatus = (typeof apiKeyStatusEnum.enumValues)[number];
+export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
+export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
