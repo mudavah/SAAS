@@ -54,26 +54,30 @@ export async function createOrganization(
 ): Promise<Organization> {
   const slug = await uniqueSlug(input.name);
 
-  const [org] = await db
-    .insert(organizations)
-    .values({
-      name: input.name,
-      slug,
-      ownerId: input.ownerId,
-      plan: "free",
-    })
-    .returning();
+  // Create the org and its owner membership atomically so a failed member
+  // insert can't leave an orphaned (ownerless) organization.
+  return db.transaction(async (tx) => {
+    const [org] = await tx
+      .insert(organizations)
+      .values({
+        name: input.name,
+        slug,
+        ownerId: input.ownerId,
+        plan: "free",
+      })
+      .returning();
 
-  await db.insert(organizationMembers).values({
-    organizationId: org.id,
-    userId: input.ownerId,
-    email: "",
-    roleType: input.roleType ?? "owner",
-    status: "active",
-    joinedAt: new Date(),
+    await tx.insert(organizationMembers).values({
+      organizationId: org.id,
+      userId: input.ownerId,
+      email: "",
+      roleType: input.roleType ?? "owner",
+      status: "active",
+      joinedAt: new Date(),
+    });
+
+    return org;
   });
-
-  return org;
 }
 
 /** Create a personal organization for a user based on their name/business. */

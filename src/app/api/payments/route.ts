@@ -7,6 +7,7 @@ import { createPayment, verifyPayment, getPaymentHistory, getPaymentStats, Payme
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { toCents, fromCents } from "@/lib/money";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "payments.view");
@@ -81,26 +82,28 @@ export async function POST(req: Request) {
       { userId: ctx.userId!, organizationId: ctx.organizationId }
     );
 
-    if (result.success && !result.checkoutUrl && payment.invoiceId) {
-      const invoice = await db.query.invoices.findFirst({
-        where: and(
-          eq(invoices.id, payment.invoiceId),
-          eq(invoices.organizationId, ctx.organizationId)
-        ),
-      });
-      if (invoice) {
-        const newPaid = parseFloat(invoice.amountPaid || "0") + parsed.data.amount;
-        const total = parseFloat(invoice.total);
-        await db
+    const invoiceId = payment.invoiceId;
+    if (result.success && !result.checkoutUrl && invoiceId) {
+      await db.transaction(async (tx) => {
+        const invoice = await tx.query.invoices.findFirst({
+          where: and(
+            eq(invoices.id, invoiceId),
+            eq(invoices.organizationId, ctx.organizationId)
+          ),
+        });
+        if (!invoice) return;
+        const totalCents = toCents(invoice.total);
+        const newPaidCents = Math.min(toCents(invoice.amountPaid) + toCents(parsed.data.amount), totalCents);
+        await tx
           .update(invoices)
           .set({
-            amountPaid: newPaid.toFixed(2),
-            status: newPaid >= total ? "paid" : "partial",
-            paidAt: newPaid >= total ? new Date() : null,
+            amountPaid: fromCents(newPaidCents),
+            status: newPaidCents >= totalCents ? "paid" : "partial",
+            paidAt: newPaidCents >= totalCents ? new Date() : null,
             updatedAt: new Date(),
           })
-          .where(eq(invoices.id, payment.invoiceId));
-      }
+          .where(eq(invoices.id, invoiceId));
+      });
     }
 
     return NextResponse.json(payment, { status: 201 });

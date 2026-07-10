@@ -34,7 +34,17 @@ export default function TeamPage() {
   async function fetchMembers() {
     const res = await fetch("/api/team");
     const data = await res.json();
-    if (data.members) setMembers(data.members);
+    if (Array.isArray(data.members)) {
+      setMembers(
+        data.members.map((m: any) => ({
+          id: m.id,
+          name: m.user?.name ?? m.name ?? null,
+          email: m.user?.email ?? m.email,
+          roleType: m.roleType,
+          status: m.status,
+        }))
+      );
+    }
   }
 
   useEffect(() => {

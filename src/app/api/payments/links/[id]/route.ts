@@ -47,8 +47,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
   const res = await requireApiContext(req, "payments.create");
   if ("error" in res) return res.error;
+  const { ctx } = res;
 
-  await db.update(paymentLinks).set({ isActive: false }).where(eq(paymentLinks.slug, id));
+  const [deleted] = await db
+    .update(paymentLinks)
+    .set({ isActive: false })
+    .where(and(eq(paymentLinks.slug, id), eq(paymentLinks.organizationId, ctx.organizationId)))
+    .returning({ id: paymentLinks.id });
+
+  if (!deleted) {
+    return NextResponse.json({ error: "Payment link not found" }, { status: 404 });
+  }
 
   return NextResponse.json({ success: true });
 }

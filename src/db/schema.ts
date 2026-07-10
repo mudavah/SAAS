@@ -312,7 +312,10 @@ export const clients = pgTable("clients", {
   tags: jsonb("tags").$type<string[]>().default([]),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("clients_org_idx").on(table.organizationId),
+  userIdx: index("clients_user_idx").on(table.userId),
+}));
 
 // Client communication log
 export const clientLogs = pgTable("client_logs", {
@@ -368,6 +371,7 @@ export const invoices = pgTable(
   },
   (invoices) => [
     uniqueIndex("unique_org_invoice_number").on(invoices.organizationId, invoices.invoiceNumber),
+    index("invoices_org_status_idx").on(invoices.organizationId, invoices.status),
   ]
 );
 
@@ -416,7 +420,11 @@ export const payments = pgTable("payments", {
   notes: text("notes"),
   paidAt: timestamp("paid_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("payments_org_idx").on(table.organizationId),
+  referenceIdx: index("payments_reference_idx").on(table.reference),
+  orgStatusIdx: index("payments_org_status_idx").on(table.organizationId, table.status),
+}));
 
 // Payment Providers Configuration
 export const paymentProviderConfigs = pgTable("payment_provider_configs", {
@@ -440,7 +448,9 @@ export const paymentProviderConfigs = pgTable("payment_provider_configs", {
   settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgProviderIdx: uniqueIndex("unique_org_provider").on(table.organizationId, table.provider),
+}));
 
 // Payment Links
 export const paymentLinks = pgTable("payment_links", {
@@ -554,7 +564,10 @@ export const expenses = pgTable("expenses", {
   receipt: text("receipt"),
   taxDeductible: boolean("tax_deductible").default(false),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("expenses_org_idx").on(table.organizationId),
+  userIdx: index("expenses_user_idx").on(table.userId),
+}));
 
 // Projects & Tasks
 export const projects = pgTable("projects", {
@@ -598,7 +611,10 @@ export const tasks = pgTable("tasks", {
   completedAt: timestamp("completed_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("tasks_org_idx").on(table.organizationId),
+  userIdx: index("tasks_user_idx").on(table.userId),
+}));
 
 // Usage tracking for freemium limits
 export const usageRecords = pgTable("usage_records", {
@@ -712,7 +728,10 @@ export const inventoryProducts = pgTable("inventory_products", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("inventory_products_org_idx").on(table.organizationId),
+  userIdx: index("inventory_products_user_idx").on(table.userId),
+}));
 
 export const inventoryStock = pgTable("inventory_stock", {
   id: text("id")
@@ -735,7 +754,10 @@ export const inventoryStock = pgTable("inventory_stock", {
   avgCost: decimal("avg_cost", { precision: 12, scale: 2 }).default("0"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  productWarehouseIdx: uniqueIndex("unique_product_warehouse").on(table.productId, table.warehouseId),
+  orgIdx: index("inventory_stock_org_idx").on(table.organizationId),
+}));
 
 export const inventoryStockMovements = pgTable("inventory_stock_movements", {
   id: text("id")
@@ -759,7 +781,10 @@ export const inventoryStockMovements = pgTable("inventory_stock_movements", {
   referenceType: text("reference_type"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("inventory_stock_movements_org_idx").on(table.organizationId),
+  productIdx: index("inventory_stock_movements_product_idx").on(table.productId),
+}));
 
 export const inventoryPurchaseOrders = pgTable("inventory_purchase_orders", {
   id: text("id")
@@ -838,7 +863,10 @@ export const chartOfAccounts = pgTable("chart_of_accounts", {
   parentId: text("parent_id"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgCodeIdx: uniqueIndex("unique_org_account_code").on(table.organizationId, table.code),
+  orgIdx: index("chart_of_accounts_org_idx").on(table.organizationId),
+}));
 
 export const journalEntries = pgTable("journal_entries", {
   id: text("id")
@@ -1200,6 +1228,8 @@ export const organizationMembers = pgTable(
         member.userId
       ),
     },
+    index("org_members_org_idx").on(member.organizationId),
+    index("org_members_email_idx").on(member.email),
   ]
 );
 

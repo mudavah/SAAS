@@ -4,9 +4,23 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { signupApiSchema } from "@/lib/validations";
+import { rateLimit, AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_MS, clientIp } from "@/lib/api/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    // Throttle account-enumeration / abuse on this unauthenticated endpoint.
+    const rl = await rateLimit({
+      key: `auth:signup:${clientIp(req)}`,
+      limit: AUTH_RATE_LIMIT,
+      windowMs: AUTH_RATE_WINDOW_MS,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": "600" } }
+      );
+    }
+
     const body = await req.json();
     const parsed = signupApiSchema.safeParse(body);
 

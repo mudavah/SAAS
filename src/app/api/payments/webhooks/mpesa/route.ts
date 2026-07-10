@@ -3,12 +3,24 @@ import { db } from "@/db";
 import { payments, invoices, paymentWebhookLogs } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { processWebhook, verifyPayment } from "@/lib/payments/engine";
+import { requireWebhookSecret } from "@/lib/payments/webhook-auth";
 import { createAuditLog } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { toCents, fromCents } from "@/lib/money";
+
+function getReference(body: unknown): string | undefined {
+  const cb = (body as any)?.Body?.stkCallback;
+  return cb?.CheckoutRequestID as string | undefined;
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const reference = getReference(body);
+
+    const authError = await requireWebhookSecret(req, "mpesa", reference);
+    if (authError) return authError;
+
     const webhookEvent = await processWebhook("mpesa", body);
 
     const [log] = await db.insert(paymentWebhookLogs).values({
@@ -49,7 +61,8 @@ export async function POST(req: Request) {
         { userId: payment.userId, organizationId: payment.organizationId }
       );
 
-      if (result.success) {
+      // Only settle when the provider has actually confirmed completion.
+      if (result.success && result.status === "completed") {
         await db
           .update(payments)
           .set({ status: "completed", paidAt: new Date(), mpesaReceipt: webhookEvent.receiptNumber || null })
@@ -63,14 +76,14 @@ export async function POST(req: Request) {
             ),
           });
           if (invoice) {
-            const newPaid = Math.min(parseFloat(invoice.amountPaid || "0") + webhookEvent.amount, parseFloat(invoice.total));
-            const total = parseFloat(invoice.total);
+            const totalCents = toCents(invoice.total);
+            const newPaidCents = Math.min(toCents(invoice.amountPaid) + toCents(webhookEvent.amount), totalCents);
             await db
               .update(invoices)
               .set({
-                amountPaid: newPaid.toFixed(2),
-                status: newPaid >= total ? "paid" : "partial",
-                paidAt: newPaid >= total ? new Date() : null,
+                amountPaid: fromCents(newPaidCents),
+                status: newPaidCents >= totalCents ? "paid" : "partial",
+                paidAt: newPaidCents >= totalCents ? new Date() : null,
                 updatedAt: new Date(),
               })
               .where(eq(invoices.id, payment.invoiceId));

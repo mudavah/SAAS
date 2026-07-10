@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users, organizations, payments, invoices, paymentWebhookLogs } from "@/db/schema";
 import { stripe, planFromPriceId } from "@/lib/stripe";
@@ -37,13 +37,12 @@ export async function POST(req: Request) {
 
   const webhookEvent = await processWebhook("stripe", event);
 
-  await db.insert(paymentWebhookLogs).values({
+  const [log] = await db.insert(paymentWebhookLogs).values({
     provider: "stripe",
     eventType: webhookEvent.type,
     payload: event as unknown as Record<string, unknown>,
-    signature,
     processed: false,
-  });
+  }).returning({ id: paymentWebhookLogs.id });
 
   try {
     switch (event.type) {
@@ -159,11 +158,7 @@ export async function POST(req: Request) {
     await db
       .update(paymentWebhookLogs)
       .set({ processed: true, processedAt: new Date() })
-      .where(and(
-        eq(paymentWebhookLogs.provider, "stripe"),
-        eq(paymentWebhookLogs.eventType, webhookEvent.type),
-        eq(paymentWebhookLogs.payload, event as unknown as Record<string, unknown>)
-      ));
+      .where(eq(paymentWebhookLogs.id, log.id));
 
     return NextResponse.json({ received: true });
   } catch (error) {

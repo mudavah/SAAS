@@ -9,6 +9,8 @@ import { BankTransferProvider } from "./providers/bank-transfer";
 import { createAuditLog } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { runPaymentAutomations } from "./automation";
+import { encryptConfigSecrets, decryptConfigSecrets } from "@/lib/crypto";
+import { toCents, fromCents } from "@/lib/money";
 
 export { PaymentEngineError };
 
@@ -59,7 +61,8 @@ export async function loadProviderConfig(organizationId: string, type: PaymentPr
   if (!org?.settings) return null;
 
   const paymentSettings = (org.settings as Record<string, unknown>).paymentProviders as Record<string, ProviderConfig> | undefined;
-  return paymentSettings?.[type] ?? null;
+  const config = paymentSettings?.[type] ?? null;
+  return decryptConfigSecrets(config) ?? null;
 }
 
 export async function saveProviderConfig(organizationId: string, type: PaymentProviderType, config: Partial<ProviderConfig>): Promise<void> {
@@ -75,7 +78,7 @@ export async function saveProviderConfig(organizationId: string, type: PaymentPr
   const paymentProviders = (settings.paymentProviders || {}) as Record<string, ProviderConfig>;
 
   const existing = paymentProviders[type] || { enabled: false, environment: "sandbox" as const };
-  const updated = { ...existing, ...config };
+  const updated = encryptConfigSecrets({ ...existing, ...config });
 
   if (config.enabled !== undefined && config.enabled) {
     updated.isDefault = config.isDefault ?? false;
@@ -94,7 +97,8 @@ export async function saveProviderConfig(organizationId: string, type: PaymentPr
 
   await db.update(organizations).set({ settings, updatedAt: new Date() }).where(eq(organizations.id, organizationId));
 
-  providers[type].updateConfig(updated);
+  // Pass decrypted secrets to the live provider instance.
+  providers[type].updateConfig(decryptConfigSecrets(updated)!);
 }
 
 export async function createPayment(input: CreatePaymentInput, context: { userId: string; organizationId: string }): Promise<{ payment: typeof payments.$inferInsert; result: CreatePaymentResult }> {
@@ -397,19 +401,14 @@ async function settleInvoice(invoiceId: string, organizationId: string, amount: 
 
   if (!invoice) return;
 
-  let newPaid = parseFloat(invoice.amountPaid || "0") + amount;
-  const total = parseFloat(invoice.total);
-
-  if (newPaid > total) {
-    newPaid = total;
-  }
-
-  const newStatus = newPaid >= total ? "paid" : "partial";
+  const totalCents = toCents(invoice.total);
+  const newPaidCents = Math.min(toCents(invoice.amountPaid) + toCents(amount), totalCents);
+  const newStatus = newPaidCents >= totalCents ? "paid" : "partial";
 
   await db
     .update(invoices)
     .set({
-      amountPaid: newPaid.toFixed(2),
+      amountPaid: fromCents(newPaidCents),
       status: newStatus,
       paidAt: newStatus === "paid" ? new Date() : null,
       updatedAt: new Date(),

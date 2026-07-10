@@ -61,6 +61,19 @@ export const API_RATE_LIMIT = 600;
 /** Hard limit per individual API key (requests / minute). */
 export const API_KEY_RATE_LIMIT = 120;
 
+/** Strict limit for unauthenticated auth endpoints (requests / 10 minutes). */
+export const AUTH_RATE_LIMIT = 10;
+export const AUTH_RATE_WINDOW_MS = 10 * 60_000;
+
+/** Best-effort client IP for rate-limit keys. */
+export function clientIp(req: Request): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
 /** Prune expired windows periodically to bound memory. */
 setInterval(() => {
   const now = Date.now();

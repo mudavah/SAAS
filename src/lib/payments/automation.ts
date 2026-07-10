@@ -3,6 +3,7 @@ import { invoices, journalEntries, journalEntryLines, chartOfAccounts, inventory
 import { eq, and } from "drizzle-orm";
 import { createAuditLog } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { toCents, fromCents } from "@/lib/money";
 import type { PaymentAutomationContext } from "./types";
 
 export async function runPaymentAutomations(context: PaymentAutomationContext): Promise<void> {
@@ -25,15 +26,15 @@ async function markInvoicePaid(context: PaymentAutomationContext): Promise<void>
 
   if (!invoice) return;
 
-  const newPaid = parseFloat(invoice.amountPaid || "0") + context.amount;
-  const total = parseFloat(invoice.total);
+  const totalCents = toCents(invoice.total);
+  const newPaidCents = Math.min(toCents(invoice.amountPaid) + toCents(context.amount), totalCents);
 
   await db
     .update(invoices)
     .set({
-      amountPaid: newPaid.toFixed(2),
-      status: newPaid >= total ? "paid" : "partial",
-      paidAt: newPaid >= total ? new Date() : null,
+      amountPaid: fromCents(newPaidCents),
+      status: newPaidCents >= totalCents ? "paid" : "partial",
+      paidAt: newPaidCents >= totalCents ? new Date() : null,
       updatedAt: new Date(),
     })
     .where(eq(invoices.id, context.invoiceId));
@@ -115,9 +116,9 @@ async function updateInventory(context: PaymentAutomationContext): Promise<void>
     if (!product || !product.stock || product.stock.length === 0) continue;
 
     const stock = product.stock[0];
-    const quantityToDeduct = parseFloat(item.quantity as unknown as string);
+    const quantityToDeduct = Number(item.quantity) || 0;
 
-    const stockQuantity = parseFloat(stock.quantity as unknown as string);
+    const stockQuantity = Number(stock.quantity) || 0;
     const newQuantity = Math.max(0, stockQuantity - quantityToDeduct);
     await db
       .update(inventoryStock)

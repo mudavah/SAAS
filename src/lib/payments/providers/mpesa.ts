@@ -200,8 +200,12 @@ export class MpesaProvider implements PaymentProvider {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            Initiator: "testapi",
-            SecurityCredential: Buffer.from("test").toString("base64"),
+            Initiator: process.env.MPESA_INITIATOR || "testapi",
+            SecurityCredential:
+              process.env.MPESA_SECURITY_CREDENTIAL ||
+              (process.env.NODE_ENV === "production"
+                ? (console.warn("[mpesa] MPESA_SECURITY_CREDENTIAL not set; refund will fail"), "")
+                : Buffer.from("test").toString("base64")),
             CommandID: "TransactionReversal",
             TransactionID: input.providerPaymentId,
             Amount: input.amount || 0,

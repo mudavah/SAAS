@@ -4,7 +4,9 @@ import { parseMpesaCallback } from "@/lib/mpesa";
 import { eq, and } from "drizzle-orm";
 import { payments, invoices } from "@/db/schema";
 import { verifyPayment } from "@/lib/payments/engine";
+import { requireWebhookSecret } from "@/lib/payments/webhook-auth";
 import { createNotification } from "@/lib/notifications";
+import { toCents, fromCents } from "@/lib/money";
 
 export async function POST(req: Request) {
   try {
@@ -15,6 +17,9 @@ export async function POST(req: Request) {
       console.log("M-Pesa callback failed:", result.resultDesc);
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
     }
+
+    const authError = await requireWebhookSecret(req, "mpesa", result.checkoutRequestId);
+    if (authError) return authError;
 
     const payment = await db.query.payments.findFirst({
       where: eq(payments.reference, result.checkoutRequestId),
@@ -29,7 +34,8 @@ export async function POST(req: Request) {
       { userId: payment.userId, organizationId: payment.organizationId || "" }
     );
 
-    if (verifyResult.success) {
+    // Only settle when the provider has actually confirmed completion.
+    if (verifyResult.success && verifyResult.status === "completed") {
       await db
         .update(payments)
         .set({
@@ -47,14 +53,14 @@ export async function POST(req: Request) {
           ),
         });
         if (invoice) {
-          const newPaid = Math.min(parseFloat(invoice.amountPaid || "0") + result.amount, parseFloat(invoice.total));
-          const total = parseFloat(invoice.total);
+          const totalCents = toCents(invoice.total);
+          const newPaidCents = Math.min(toCents(invoice.amountPaid) + toCents(result.amount), totalCents);
           await db
             .update(invoices)
             .set({
-              amountPaid: newPaid.toFixed(2),
-              status: newPaid >= total ? "paid" : "partial",
-              paidAt: newPaid >= total ? new Date() : null,
+              amountPaid: fromCents(newPaidCents),
+              status: newPaidCents >= totalCents ? "paid" : "partial",
+              paidAt: newPaidCents >= totalCents ? new Date() : null,
               updatedAt: new Date(),
             })
             .where(eq(invoices.id, payment.invoiceId));

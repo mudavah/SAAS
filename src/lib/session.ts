@@ -139,6 +139,16 @@ async function resolveSessionContext(
     return { ctx: null, noOrg: true };
   }
 
+  // Guard against a custom role from a different organization escalating
+  // privileges in this tenant. Fall back to the system role if mismatched.
+  if (
+    member.customRoleId &&
+    member.customRole &&
+    member.customRole.organizationId !== orgId
+  ) {
+    member = { ...member, customRoleId: null, customRole: null };
+  }
+
   const org = await loadOrg(orgId);
   if (!org) return { ctx: null, noOrg: true };
 

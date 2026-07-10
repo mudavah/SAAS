@@ -4,9 +4,20 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { forgotPasswordSchema } from "@/lib/validations";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { rateLimit, AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_MS, clientIp } from "@/lib/api/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    // Throttle email-bombing on this unauthenticated endpoint.
+    const rl = await rateLimit({
+      key: `auth:forgot:${clientIp(req)}`,
+      limit: AUTH_RATE_LIMIT,
+      windowMs: AUTH_RATE_WINDOW_MS,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json({ success: true });
+    }
+
     const body = await req.json();
     const parsed = forgotPasswordSchema.safeParse(body);
 
