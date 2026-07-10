@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/db";
 import { payments } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -15,33 +16,16 @@ function timingSafeEqual(a: string, b: string): boolean {
   return r === 0;
 }
 
-/**
- * Authenticate a provider webhook (M-Pesa / Pesapal). These endpoints bypass
- * the session middleware, so they MUST be authenticated here.
- *
- * Resolution order for the expected secret:
- *   1. the organization-level `webhookSecret` for the referenced payment
- *   2. a global env override (`MPESA_WEBHOOK_SECRET` / `PESAPAL_WEBHOOK_SECRET`)
- *
- * The secret may be supplied via the `x-kf-webhook-secret` header, the
- * `Authorization: Bearer …` header, or a `?secret=` query param.
- *
- * Returns a NextResponse (401/503) when authentication fails, or `null` when
- * the request may proceed. When no secret is configured, the request is
- * allowed (with a warning) so existing deployments keep working until an
- * operator configures a secret.
- */
+function computeSignature(rawBody: string, secret: string): string {
+  return crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+}
+
 export async function requireWebhookSecret(
   req: Request,
   provider: PaymentProviderType,
-  reference?: string
+  reference?: string,
+  rawBody?: string,
 ): Promise<NextResponse | null> {
-  const provided =
-    req.headers.get("x-kf-webhook-secret") ||
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-    new URL(req.url).searchParams.get("secret") ||
-    undefined;
-
   let expected: string | undefined;
 
   if (reference) {
@@ -65,12 +49,32 @@ export async function requireWebhookSecret(
   if (envKey && process.env[envKey]) expected = expected || process.env[envKey];
 
   if (!expected) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "Webhook secret not configured" },
+        { status: 401 }
+      );
+    }
     console.warn(
       `[webhook] No webhook secret configured for provider "${provider}"; ` +
-        `allowing unauthenticated webhook. Configure webhookSecret to secure it.`
+        "allowing unauthenticated webhook. Configure webhookSecret to secure it."
     );
     return null;
   }
+
+  const signature = req.headers.get("x-kf-signature");
+  if (signature && rawBody) {
+    const expectedSig = computeSignature(rawBody, expected);
+    if (!timingSafeEqual(signature, expectedSig)) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+    return null;
+  }
+
+  const provided =
+    req.headers.get("x-kf-webhook-secret") ||
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
+    undefined;
 
   if (!provided || !timingSafeEqual(provided, expected)) {
     console.warn(`[webhook] Rejected ${provider} webhook: bad/missing secret.`);

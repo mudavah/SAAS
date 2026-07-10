@@ -539,11 +539,14 @@ export const paymentWebhookLogs = pgTable("payment_webhook_logs", {
   eventType: text("event_type").notNull(),
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
   signature: text("signature"),
+  dedupeKey: text("dedupe_key"),
   processed: boolean("processed").default(false).notNull(),
   error: text("error"),
   receivedAt: timestamp("received_at", { mode: "date" }).defaultNow().notNull(),
   processedAt: timestamp("processed_at", { mode: "date" }),
-});
+}, (table) => ({
+  dedupeKeyIdx: uniqueIndex("payment_webhook_logs_dedupe_key_idx").on(table.dedupeKey),
+}));
 
 // Expenses
 export const expenses = pgTable("expenses", {
