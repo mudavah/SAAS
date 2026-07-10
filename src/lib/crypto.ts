@@ -55,6 +55,8 @@ export const SECRET_FIELDS = [
   "passkey",
   "webhookSecret",
   "securityCredential",
+  "tin",
+  "pin",
 ] as const;
 
 export function encryptConfigSecrets<T extends object>(config: T): T {

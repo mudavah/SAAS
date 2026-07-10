@@ -5,6 +5,7 @@ import { etimsConfigSchema } from "@/lib/validations";
 import { eq } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { encryptConfigSecrets, decryptConfigSecrets } from "@/lib/crypto";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
     where: eq(etimsConfig.organizationId, ctx.organizationId),
   });
 
-  return NextResponse.json(config || {});
+  return NextResponse.json(decryptConfigSecrets(config) || {});
 }
 
 export async function POST(req: Request) {
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
       const [updated] = await db
         .update(etimsConfig)
         .set({
-          ...parsed.data,
+          ...encryptConfigSecrets(parsed.data),
           organizationId: ctx.organizationId,
           updatedAt: new Date(),
         })
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
       .values({
         organizationId: ctx.organizationId,
         userId: ctx.userId!,
-        ...parsed.data,
+        ...encryptConfigSecrets(parsed.data),
       })
       .returning();
 
