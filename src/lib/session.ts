@@ -47,7 +47,7 @@ export interface ServerContext {
   image?: string | null;
   plan?: string;
   organizationId: string;
-  organization: { id: string; name: string; slug: string; plan: string };
+  organization: { id: string; name: string; slug: string; plan: string; ownerId: string };
   roleType: RoleTypeOrApi;
   memberId: string | null;
   permissions: PermissionSet;
@@ -87,7 +87,7 @@ async function loadMembership(userId: string, orgId: string) {
 async function loadOrg(orgId: string) {
   return db.query.organizations.findFirst({
     where: eq(organizations.id, orgId),
-    columns: { id: true, name: true, slug: true, plan: true },
+    columns: { id: true, name: true, slug: true, plan: true, ownerId: true },
   });
 }
 
@@ -181,7 +181,7 @@ async function resolveApiContext(
 
   return {
     ctx: {
-      userId: null,
+      userId: org.ownerId,
       organizationId: org.id,
       organization: org,
       roleType: "api",
