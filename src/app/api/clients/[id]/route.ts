@@ -1,22 +1,25 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "clients.delete");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const { id } = await params;
 
   const client = await db.query.clients.findFirst({
-    where: and(eq(clients.id, id), eq(clients.userId, session.user.id)),
+    where: and(
+      eq(clients.id, id),
+      eq(clients.organizationId, ctx.organizationId)
+    ),
   });
 
   if (!client) {
@@ -25,7 +28,21 @@ export async function DELETE(
 
   await db
     .delete(clients)
-    .where(and(eq(clients.id, id), eq(clients.userId, session.user.id)));
+    .where(
+      and(
+        eq(clients.id, id),
+        eq(clients.organizationId, ctx.organizationId)
+      )
+    );
+
+  await logAuditSafe(ctx, {
+    action: "client.delete",
+    category: "clients",
+    resourceType: "client",
+    resourceId: id,
+    description: `Deleted client ${client.name}`,
+    oldValues: { name: client.name, email: client.email },
+  });
 
   return NextResponse.json({ success: true });
 }

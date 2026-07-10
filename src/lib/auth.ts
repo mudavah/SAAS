@@ -3,10 +3,11 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { users, accounts, sessions, verificationTokens } from "@/db/schema";
+import { users, accounts, sessions, verificationTokens, organizationMembers } from "@/db/schema";
 import { loginSchema } from "@/lib/validations";
+import { getActiveOrganization, ensureUserHasOrganization } from "@/lib/org";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
@@ -74,9 +75,49 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Resolve the user's active organization (tenant) + role.
+      if (token.id) {
+        const active = await getActiveOrganization(token.id as string);
+        if (active) {
+          token.orgId = active.organization.id;
+          token.roleType = active.roleType;
+          token.orgName = active.organization.name;
+          token.orgSlug = active.organization.slug;
+          token.orgPlan = active.organization.plan;
+        } else {
+          // Lazily create a personal organization for any auth method
+          // (e.g. Google sign-in) that didn't go through explicit setup.
+          const created = await ensureUserHasOrganization(token.id as string);
+          if (created) {
+            token.orgId = created.id;
+            token.roleType = "owner";
+            token.orgName = created.name;
+            token.orgSlug = created.slug;
+            token.orgPlan = created.plan;
+          } else {
+            token.orgId = null;
+            token.roleType = null;
+            token.orgName = null;
+            token.orgSlug = null;
+            token.orgPlan = null;
+          }
+        }
+      }
+
       if (trigger === "update" && session) {
         token.onboardingComplete = session.onboardingComplete;
         token.plan = session.plan;
+        // Allow forcing a re-resolution of the active org (e.g. org switch).
+        if ((session as { orgId?: string }).orgId) {
+          const active = await getActiveOrganization(token.id as string);
+          if (active) {
+            token.orgId = active.organization.id;
+            token.roleType = active.roleType;
+            token.orgName = active.organization.name;
+            token.orgSlug = active.organization.slug;
+            token.orgPlan = active.organization.plan;
+          }
+        }
       }
 
       return token;
@@ -86,6 +127,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id as string;
         session.user.plan = token.plan as string;
         session.user.onboardingComplete = token.onboardingComplete as boolean;
+        session.user.orgId = (token.orgId as string | null) ?? null;
+        session.user.roleType = (token.roleType as string | null) ?? null;
+        session.user.orgName = (token.orgName as string | null) ?? null;
+        session.user.orgSlug = (token.orgSlug as string | null) ?? null;
+        session.user.orgPlan = (token.orgPlan as string | null) ?? null;
       }
       return session;
     },

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, organizations } from "@/db/schema";
 import { stripe, planFromPriceId } from "@/lib/stripe";
 import type Stripe from "stripe";
 import type { PlanType } from "@/lib/utils";
@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       case "checkout.session.completed": {
         const checkoutSession = event.data.object as Stripe.Checkout.Session;
         const userId = checkoutSession.metadata?.userId;
+        const organizationId = checkoutSession.metadata?.organizationId;
         const plan = (checkoutSession.metadata?.plan || "pro") as PlanType;
 
         if (userId) {
@@ -44,11 +45,18 @@ export async function POST(req: Request) {
             .update(users)
             .set({
               plan,
-              stripeCustomerId: checkoutSession.customer as string,
-              stripeSubscriptionId: checkoutSession.subscription as string,
               updatedAt: new Date(),
             })
             .where(eq(users.id, userId));
+        }
+        if (organizationId) {
+          await db
+            .update(organizations)
+            .set({
+              plan,
+              updatedAt: new Date(),
+            })
+            .where(eq(organizations.id, organizationId));
         }
         break;
       }
@@ -56,6 +64,7 @@ export async function POST(req: Request) {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
         const userId = subscription.metadata?.userId;
+        const organizationId = subscription.metadata?.organizationId;
         const priceId = subscription.items.data[0]?.price.id;
         const plan = priceId ? planFromPriceId(priceId) : "free";
         const active = subscription.status === "active" || subscription.status === "trialing";
@@ -65,10 +74,18 @@ export async function POST(req: Request) {
             .update(users)
             .set({
               plan: active ? plan : "free",
-              stripeSubscriptionId: subscription.id,
               updatedAt: new Date(),
             })
             .where(eq(users.id, userId));
+        }
+        if (organizationId) {
+          await db
+            .update(organizations)
+            .set({
+              plan: active ? plan : "free",
+              updatedAt: new Date(),
+            })
+            .where(eq(organizations.id, organizationId));
         }
         break;
       }
@@ -76,16 +93,25 @@ export async function POST(req: Request) {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const userId = subscription.metadata?.userId;
+        const organizationId = subscription.metadata?.organizationId;
 
         if (userId) {
           await db
             .update(users)
             .set({
               plan: "free",
-              stripeSubscriptionId: null,
               updatedAt: new Date(),
             })
             .where(eq(users.id, userId));
+        }
+        if (organizationId) {
+          await db
+            .update(organizations)
+            .set({
+              plan: "free",
+              updatedAt: new Date(),
+            })
+            .where(eq(organizations.id, organizationId));
         }
         break;
       }

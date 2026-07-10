@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { etimsInvoices, invoices, etimsConfig } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "compliance.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const etimsRecords = await db.query.etimsInvoices.findMany({
-    where: eq(etimsInvoices.userId, session.user.id),
+    where: eq(etimsInvoices.organizationId, ctx.organizationId),
     orderBy: (records) => [desc(records.createdAt)],
     with: {
       invoice: {
@@ -26,10 +27,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "compliance.submit");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const invoice = await db.query.invoices.findFirst({
-      where: and(eq(invoices.id, invoiceId), eq(invoices.userId, session.user.id)),
+      where: and(eq(invoices.id, invoiceId), eq(invoices.organizationId, ctx.organizationId)),
       with: { client: true, items: true },
     });
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     }
 
     const config = await db.query.etimsConfig.findFirst({
-      where: eq(etimsConfig.userId, session.user.id),
+      where: eq(etimsConfig.organizationId, ctx.organizationId),
     });
 
     if (!config || !config.isActive) {
@@ -71,7 +71,8 @@ export async function POST(req: Request) {
     const [etimsRecord] = await db
       .insert(etimsInvoices)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         invoiceId: invoice.id,
         etimsInvoiceNumber: mockResponse.invoiceNumber,
         status: "validated",
@@ -79,6 +80,24 @@ export async function POST(req: Request) {
         submittedAt: new Date(),
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "etims_invoice.submit",
+      category: "compliance",
+      resourceType: "etims_invoice",
+      resourceId: etimsRecord.id,
+      description: `Submitted invoice ${invoice.invoiceNumber} to KRA eTIMS`,
+      newValues: { etimsInvoiceNumber: mockResponse.invoiceNumber, status: "validated" },
+    });
+
+    await createNotification({
+      organizationId: ctx.organizationId,
+      category: "compliance",
+      type: "etims_submitted",
+      title: "eTIMS submission",
+      message: `Invoice ${invoice.invoiceNumber} submitted to KRA eTIMS.`,
+      deepLink: "/dashboard/compliance",
+    });
 
     return NextResponse.json(etimsRecord, { status: 201 });
   } catch (error) {

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { chartOfAccounts } from "@/db/schema";
 import { chartOfAccountsSchema } from "@/lib/validations";
 import { eq, asc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
 const DEFAULT_ACCOUNTS = [
   { code: "1000", name: "Cash", type: "asset" as const },
@@ -24,21 +25,21 @@ const DEFAULT_ACCOUNTS = [
   { code: "6500", name: "Office Supplies", type: "expense" as const },
 ];
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "bookkeeping.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   let accounts = await db.query.chartOfAccounts.findMany({
-    where: eq(chartOfAccounts.userId, session.user.id),
+    where: eq(chartOfAccounts.organizationId, ctx.organizationId),
     orderBy: (accounts) => [asc(accounts.code)],
   });
 
   if (accounts.length === 0) {
     await db.insert(chartOfAccounts).values(
       DEFAULT_ACCOUNTS.map((acc) => ({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         code: acc.code,
         name: acc.name,
         type: acc.type,
@@ -46,7 +47,7 @@ export async function GET() {
       }))
     );
     accounts = await db.query.chartOfAccounts.findMany({
-      where: eq(chartOfAccounts.userId, session.user.id),
+      where: eq(chartOfAccounts.organizationId, ctx.organizationId),
       orderBy: (accounts) => [asc(accounts.code)],
     });
   }
@@ -55,10 +56,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "bookkeeping.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -74,10 +74,20 @@ export async function POST(req: Request) {
     const [account] = await db
       .insert(chartOfAccounts)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         ...parsed.data,
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "account.create",
+      category: "bookkeeping",
+      resourceType: "account",
+      resourceId: account.id,
+      description: `Created account ${account.name} (${account.code})`,
+      newValues: { code: account.code, name: account.name, type: account.type },
+    });
 
     return NextResponse.json(account, { status: 201 });
   } catch (error) {

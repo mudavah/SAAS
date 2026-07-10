@@ -7,15 +7,27 @@ const authRoutes = ["/login", "/signup", "/forgot-password"];
 
 export default auth((req) => {
   const { nextUrl } = req;
+  const pathname = nextUrl.pathname;
   const isLoggedIn = !!req.auth;
-  const isPublic = publicRoutes.includes(nextUrl.pathname);
-  const isAuthRoute = authRoutes.includes(nextUrl.pathname);
-  const isOnboarding = nextUrl.pathname === "/onboarding";
-  const isApiAuth = nextUrl.pathname.startsWith("/api/auth");
-  const isMpesaCallback = nextUrl.pathname === "/api/mpesa/callback";
-  const isStripeWebhook = nextUrl.pathname === "/api/stripe/webhook";
+  const isPublic = publicRoutes.includes(pathname);
+  const isAuthRoute = authRoutes.includes(pathname);
+  const isOnboarding = pathname === "/onboarding";
+  const isApiAuth = pathname.startsWith("/api/auth");
+  const isMpesaCallback = pathname === "/api/mpesa/callback";
+  const isStripeWebhook = pathname === "/api/stripe/webhook";
+  // Public API routes authenticate via API keys inside the handler.
+  const isPublicApi = pathname.startsWith("/api/v1");
+  const isApi = pathname.startsWith("/api");
 
-  if (isApiAuth || isMpesaCallback || isStripeWebhook) return;
+  // These endpoints authenticate themselves — never redirect them.
+  if (isApiAuth || isMpesaCallback || isStripeWebhook || isPublicApi) {
+    return NextResponse.next();
+  }
+
+  // Other API routes authenticate via session cookies; let them return 401.
+  if (isApi) {
+    return NextResponse.next();
+  }
 
   if (isAuthRoute && isLoggedIn) {
     return NextResponse.redirect(new URL("/dashboard", nextUrl));
@@ -29,7 +41,18 @@ export default auth((req) => {
     isLoggedIn &&
     !req.auth?.user?.onboardingComplete &&
     !isOnboarding &&
-    !nextUrl.pathname.startsWith("/api")
+    !isApi
+  ) {
+    return NextResponse.redirect(new URL("/onboarding", nextUrl));
+  }
+
+  // Tenant guard: a logged-in, onboarded user must have an active organization.
+  if (
+    isLoggedIn &&
+    req.auth?.user?.onboardingComplete &&
+    !req.auth?.user?.orgId &&
+    pathname.startsWith("/dashboard") &&
+    !isApi
   ) {
     return NextResponse.redirect(new URL("/onboarding", nextUrl));
   }

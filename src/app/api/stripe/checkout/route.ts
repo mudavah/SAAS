@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -11,16 +10,16 @@ import {
   getPriceIdForPlan,
 } from "@/lib/stripe";
 import type Stripe from "stripe";
+import { requireApiContext } from "@/lib/session";
 
 export async function GET() {
   return NextResponse.json(getStripeConfigStatus());
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id || !session.user.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "subscription.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const { plan } = await req.json();
@@ -41,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     const user = await db.query.users.findFirst({
-      where: eq(users.id, session.user.id),
+      where: eq(users.id, ctx.userId!),
     });
 
     if (!user) {
@@ -52,22 +51,23 @@ export async function POST(req: Request) {
 
     if (!customerId) {
       const customer = await createStripeCustomer(
-        session.user.email,
-        session.user.name ?? undefined
+        user.email,
+        user.name ?? undefined
       );
       customerId = customer.id;
       await db
         .update(users)
         .set({ stripeCustomerId: customerId, updatedAt: new Date() })
-        .where(eq(users.id, session.user.id));
+        .where(eq(users.id, ctx.userId!));
     }
 
     const priceId = getPriceIdForPlan(plan);
     const checkoutSession = await createCheckoutSession(
       customerId,
       priceId,
-      session.user.id,
-      plan
+      ctx.userId!,
+      plan,
+      ctx.organizationId
     );
 
     if (!checkoutSession.url) {

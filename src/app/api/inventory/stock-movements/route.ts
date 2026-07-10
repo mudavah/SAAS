@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { inventoryStockMovements, inventoryStock, inventoryProducts } from "@/db/schema";
 import { inventoryStockMovementSchema } from "@/lib/validations";
 import { eq, and, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "inventory.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const movements = await db.query.inventoryStockMovements.findMany({
-    where: eq(inventoryStockMovements.userId, session.user.id),
+    where: eq(inventoryStockMovements.organizationId, ctx.organizationId),
     orderBy: (movements) => [desc(movements.createdAt)],
     with: {
       product: true,
@@ -23,10 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.stock.adjust");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -42,7 +41,7 @@ export async function POST(req: Request) {
     const productResult = await db.query.inventoryProducts.findFirst({
       where: and(
         eq(inventoryProducts.id, parsed.data.productId),
-        eq(inventoryProducts.userId, session.user.id)
+        eq(inventoryProducts.organizationId, ctx.organizationId)
       ),
     });
 
@@ -63,7 +62,8 @@ export async function POST(req: Request) {
     const [movement] = await db
       .insert(inventoryStockMovements)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         productId: parsed.data.productId,
         warehouseId: parsed.data.warehouseId,
         type: parsed.data.type,
@@ -88,6 +88,15 @@ export async function POST(req: Request) {
         .set({ quantity: Math.max(0, newQty).toFixed(2), updatedAt: new Date() })
         .where(eq(inventoryStock.id, stockResult.id));
     }
+
+    await logAuditSafe(ctx, {
+      action: "inventory_stock_movement.create",
+      category: "inventory",
+      resourceType: "inventory_stock_movement",
+      resourceId: movement.id,
+      description: `Recorded stock movement ${parsed.data.type} for ${productResult.name}`,
+      newValues: { productId: parsed.data.productId, type: parsed.data.type, quantity: parsed.data.quantity },
+    });
 
     return NextResponse.json(movement, { status: 201 });
   } catch (error) {

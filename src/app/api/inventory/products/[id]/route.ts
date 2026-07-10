@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { inventoryProducts, inventoryStock, inventoryCategories, inventoryBrands } from "@/db/schema";
 import { inventoryProductSchema } from "@/lib/validations";
 import { eq, and } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(_req, "inventory.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const { id } = await params;
 
   const product = await db.query.inventoryProducts.findFirst({
-    where: and(eq(inventoryProducts.id, id), eq(inventoryProducts.userId, session.user.id)),
+    where: and(eq(inventoryProducts.id, id), eq(inventoryProducts.organizationId, ctx.organizationId)),
     with: {
       category: true,
       brand: true,
@@ -36,10 +36,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.products.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const { id } = await params;
   const body = await req.json();
@@ -70,12 +69,21 @@ export async function PATCH(
       ...(parsed.data.maxStockLevel !== undefined && { maxStockLevel: parsed.data.maxStockLevel }),
       ...(parsed.data.reorderPoint !== undefined && { reorderPoint: parsed.data.reorderPoint }),
     })
-    .where(and(eq(inventoryProducts.id, id), eq(inventoryProducts.userId, session.user.id)))
+    .where(and(eq(inventoryProducts.id, id), eq(inventoryProducts.organizationId, ctx.organizationId)))
     .returning();
 
   if (!updated) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  await logAuditSafe(ctx, {
+    action: "inventory_product.update",
+    category: "inventory",
+    resourceType: "inventory_product",
+    resourceId: updated.id,
+    description: `Updated inventory product ${updated.name}`,
+    newValues: { name: updated.name, sku: updated.sku },
+  });
 
   return NextResponse.json(updated);
 }
@@ -84,16 +92,23 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(_req, "inventory.products.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const { id } = await params;
 
   await db
     .delete(inventoryProducts)
-    .where(and(eq(inventoryProducts.id, id), eq(inventoryProducts.userId, session.user.id)));
+    .where(and(eq(inventoryProducts.id, id), eq(inventoryProducts.organizationId, ctx.organizationId)));
+
+  await logAuditSafe(ctx, {
+    action: "inventory_product.delete",
+    category: "inventory",
+    resourceType: "inventory_product",
+    resourceId: id,
+    description: `Deleted inventory product ${id}`,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import {
   inventoryProducts,
@@ -10,12 +9,13 @@ import {
 } from "@/db/schema";
 import { inventoryProductSchema } from "@/lib/validations";
 import { eq, asc, desc, and, sql, SQL } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const { searchParams } = new URL(req.url);
   const categoryId = searchParams.get("categoryId");
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const search = searchParams.get("search");
   const lowStock = searchParams.get("lowStock");
 
-  const whereClauses: SQL[] = [eq(inventoryProducts.userId, session.user.id)];
+  const whereClauses: SQL[] = [eq(inventoryProducts.organizationId, ctx.organizationId)];
 
   if (categoryId) {
     whereClauses.push(eq(inventoryProducts.categoryId, categoryId));
@@ -60,10 +60,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.products.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -77,7 +76,8 @@ export async function POST(req: Request) {
     }
 
     const values: Record<string, unknown> = {
-      userId: session.user.id,
+      organizationId: ctx.organizationId,
+      userId: ctx.userId!,
       name: parsed.data.name,
       sellingPrice: parsed.data.sellingPrice.toString(),
       isActive: parsed.data.isActive,
@@ -100,12 +100,13 @@ export async function POST(req: Request) {
       .returning();
 
     const warehouseResult = await db.query.inventoryWarehouses.findFirst({
-      where: eq(inventoryWarehouses.userId, session.user.id),
+      where: eq(inventoryWarehouses.organizationId, ctx.organizationId),
     });
 
     if (warehouseResult) {
       await db.insert(inventoryStock).values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         productId: product.id,
         warehouseId: warehouseResult.id,
         quantity: "0",
@@ -113,6 +114,15 @@ export async function POST(req: Request) {
         avgCost: (parsed.data.costPrice || 0).toString(),
       });
     }
+
+    await logAuditSafe(ctx, {
+      action: "inventory_product.create",
+      category: "inventory",
+      resourceType: "inventory_product",
+      resourceId: product.id,
+      description: `Created inventory product ${product.name}`,
+      newValues: { name: product.name, sku: product.sku },
+    });
 
     return NextResponse.json(product, { status: 201 });
   } catch (error) {

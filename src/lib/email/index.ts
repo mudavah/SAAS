@@ -106,3 +106,86 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
 
   return { success: true };
 }
+
+export async function sendInviteEmail({
+  to,
+  orgName,
+  inviterName,
+  role,
+}: {
+  to: string;
+  orgName: string;
+  inviterName?: string | null;
+  role: string;
+}): Promise<{ success: boolean }> {
+  if (!isEmailConfigured()) return { success: false };
+  try {
+    const resend = getResendClient();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const { error } = await resend.emails.send({
+      from: getEmailFrom(),
+      to: [to],
+      subject: `You've been invited to ${orgName} on KaziFlow`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto">
+          <h2 style="color:#16a34a">Join ${orgName}</h2>
+          <p style="color:#334155;font-size:15px">
+            ${inviterName ? `${inviterName} has` : "You have been"} invited you to collaborate on
+            <strong>${orgName}</strong> as <strong>${role}</strong>.
+          </p>
+          <a href="${appUrl}/signup" style="display:inline-block;margin-top:12px;background:#16a34a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px">Create your account</a>
+        </div>`,
+    });
+    if (error) {
+      console.error("Invite email failed:", error.message);
+      return { success: false };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error("Invite email error:", err);
+    return { success: false };
+  }
+}
+export async function sendNotificationEmail({
+  to,
+  title,
+  message,
+  category,
+  deepLink,
+  orgName,
+}: {
+  to: string;
+  title: string;
+  message: string;
+  category: string;
+  deepLink?: string | null;
+  orgName?: string;
+}): Promise<{ success: boolean }> {
+  if (!isEmailConfigured()) return { success: false };
+
+  try {
+    const resend = getResendClient();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const link = deepLink ? `${appUrl}${deepLink}` : appUrl;
+    const { error } = await resend.emails.send({
+      from: getEmailFrom(),
+      to: [to],
+      subject: `[${orgName || "KaziFlow"}] ${title}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto">
+          <h2 style="color:#16a34a">${title}</h2>
+          <p style="color:#334155;font-size:15px">${message}</p>
+          <p style="color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.05em">${category}</p>
+          <a href="${link}" style="display:inline-block;margin-top:12px;background:#16a34a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px">Open in KaziFlow</a>
+        </div>`,
+    });
+    if (error) {
+      console.error("Notification email failed:", error.message);
+      return { success: false };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error("Notification email error:", err);
+    return { success: false };
+  }
+}

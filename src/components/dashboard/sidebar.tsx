@@ -20,6 +20,9 @@ import {
   Boxes,
   BookOpen,
   Shield,
+  Users2,
+  Bell,
+  FileSearch,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -41,6 +44,9 @@ const navItems = [
   { href: "/dashboard/bookkeeping", label: "Bookkeeping", icon: BookOpen },
   { href: "/dashboard/compliance", label: "eTIMS", icon: Shield },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/team", label: "Team", icon: Users2 },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/audit", label: "Audit Logs", icon: FileSearch },
 ];
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {

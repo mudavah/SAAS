@@ -1,31 +1,30 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { clientSchema } from "@/lib/validations";
-import { eq } from "drizzle-orm";
+import { eq, desc, and, count } from "drizzle-orm";
 import { PLAN_LIMITS, type PlanType } from "@/lib/utils";
-import { count } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "clients.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
-  const userClients = await db.query.clients.findMany({
-    where: eq(clients.userId, session.user.id),
+  const rows = await db.query.clients.findMany({
+    where: eq(clients.organizationId, ctx.organizationId),
     orderBy: (clients, { desc }) => [desc(clients.createdAt)],
   });
 
-  return NextResponse.json(userClients);
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "clients.create");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -38,14 +37,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const plan = (session.user.plan || "free") as PlanType;
+    const plan = (ctx.organization.plan || "free") as PlanType;
     const limits = PLAN_LIMITS[plan];
 
     if (limits.clients !== Infinity) {
       const [result] = await db
         .select({ count: count() })
         .from(clients)
-        .where(eq(clients.userId, session.user.id));
+        .where(eq(clients.organizationId, ctx.organizationId));
 
       if (result.count >= limits.clients) {
         return NextResponse.json(
@@ -58,11 +57,30 @@ export async function POST(req: Request) {
     const [client] = await db
       .insert(clients)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         ...parsed.data,
         email: parsed.data.email || null,
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "client.create",
+      category: "clients",
+      resourceType: "client",
+      resourceId: client.id,
+      description: `Created client ${client.name}`,
+      newValues: { name: client.name, email: client.email },
+    });
+
+    await createNotification({
+      organizationId: ctx.organizationId,
+      category: "organization",
+      type: "client_added",
+      title: "Client added",
+      message: `Client ${client.name} was added.`,
+      deepLink: "/dashboard/clients",
+    });
 
     return NextResponse.json(client, { status: 201 });
   } catch (error) {

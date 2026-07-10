@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { usageRecords } from "@/db/schema";
 import { aiRequestSchema } from "@/lib/validations";
 import { generateAiContent } from "@/lib/ai";
 import { eq, and } from "drizzle-orm";
 import { getCurrentMonth, PLAN_LIMITS, type PlanType } from "@/lib/utils";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "ai.access");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -24,14 +24,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const plan = (session.user.plan || "free") as PlanType;
+    const plan = (ctx.organization.plan || "free") as PlanType;
     const limits = PLAN_LIMITS[plan];
 
     if (limits.aiRequestsPerMonth !== Infinity) {
       const month = getCurrentMonth();
       const usage = await db.query.usageRecords.findFirst({
         where: and(
-          eq(usageRecords.userId, session.user.id),
+          eq(usageRecords.organizationId, ctx.organizationId),
           eq(usageRecords.month, month)
         ),
       });
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const month = getCurrentMonth();
     const existingUsage = await db.query.usageRecords.findFirst({
       where: and(
-        eq(usageRecords.userId, session.user.id),
+        eq(usageRecords.organizationId, ctx.organizationId),
         eq(usageRecords.month, month)
       ),
     });
@@ -61,11 +61,20 @@ export async function POST(req: Request) {
         .where(eq(usageRecords.id, existingUsage.id));
     } else {
       await db.insert(usageRecords).values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         month,
         aiRequests: 1,
       });
     }
+
+    await logAuditSafe(ctx, {
+      action: "ai.request",
+      category: "ai",
+      resourceType: "ai_request",
+      description: `AI request: ${parsed.data.type}`,
+      newValues: { type: parsed.data.type },
+    });
 
     return NextResponse.json({ content });
   } catch (error) {

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { journalEntries, journalEntryLines } from "@/db/schema";
 import { journalEntrySchema } from "@/lib/validations";
 import { eq, and, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "bookkeeping.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const entries = await db.query.journalEntries.findMany({
-    where: eq(journalEntries.userId, session.user.id),
+    where: eq(journalEntries.organizationId, ctx.organizationId),
     orderBy: (entries) => [desc(entries.createdAt)],
     with: {
       lines: {
@@ -27,10 +27,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "bookkeeping.post");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -46,7 +45,8 @@ export async function POST(req: Request) {
     const [entry] = await db
       .insert(journalEntries)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         date: parsed.data.date,
         description: parsed.data.description,
         status: parsed.data.status,
@@ -62,6 +62,15 @@ export async function POST(req: Request) {
     }));
 
     await db.insert(journalEntryLines).values(lines);
+
+    await logAuditSafe(ctx, {
+      action: "journal_entry.create",
+      category: "bookkeeping",
+      resourceType: "journal_entry",
+      resourceId: entry.id,
+      description: `Created journal entry ${entry.id}: ${entry.description}`,
+      newValues: { date: entry.date, description: entry.description },
+    });
 
     return NextResponse.json(entry, { status: 201 });
   } catch (error) {

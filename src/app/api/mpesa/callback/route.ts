@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { payments, invoices } from "@/db/schema";
 import { parseMpesaCallback } from "@/lib/mpesa";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { createAuditLog } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: Request) {
   try {
@@ -19,6 +21,8 @@ export async function POST(req: Request) {
     });
 
     if (payment) {
+      const organizationId = payment.organizationId;
+
       await db
         .update(payments)
         .set({
@@ -30,7 +34,10 @@ export async function POST(req: Request) {
 
       if (payment.invoiceId && result.amount) {
         const invoice = await db.query.invoices.findFirst({
-          where: eq(invoices.id, payment.invoiceId),
+          where: and(
+            eq(invoices.id, payment.invoiceId),
+            eq(invoices.organizationId, organizationId ?? "")
+          ),
         });
         if (invoice) {
           const newPaid =
@@ -46,6 +53,28 @@ export async function POST(req: Request) {
             })
             .where(eq(invoices.id, payment.invoiceId));
         }
+      }
+
+      if (organizationId) {
+        await createAuditLog({
+          action: "payment.update",
+          category: "payments",
+          organizationId,
+          resourceType: "payment",
+          resourceId: payment.id,
+          description: `M-Pesa payment completed (${result.mpesaReceiptNumber})`,
+          newValues: { status: "completed", receipt: result.mpesaReceiptNumber },
+        });
+
+        await createNotification({
+          organizationId,
+          category: "payments",
+          type: "mpesa_success",
+          title: "M-Pesa payment successful",
+          message: `Received M-Pesa payment of ${result.amount?.toFixed(2)}.`,
+          priority: "high",
+          deepLink: "/dashboard/payments",
+        });
       }
     }
 

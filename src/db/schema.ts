@@ -8,6 +8,8 @@ import {
   pgEnum,
   jsonb,
   primaryKey,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -90,6 +92,103 @@ export const etimsStatusEnum = pgEnum("etims_status", [
   "cancelled",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enterprise Foundation enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+// RBAC system roles
+export const roleTypeEnum = pgEnum("role_type", [
+  "owner",
+  "administrator",
+  "manager",
+  "accountant",
+  "inventory_manager",
+  "cashier",
+  "sales_representative",
+  "employee",
+  "viewer",
+]);
+
+export const memberStatusEnum = pgEnum("member_status", [
+  "invited",
+  "active",
+  "suspended",
+]);
+
+export const permissionCategoryEnum = pgEnum("permission_category", [
+  "organization",
+  "clients",
+  "invoices",
+  "payments",
+  "expenses",
+  "inventory",
+  "purchasing",
+  "bookkeeping",
+  "reports",
+  "compliance",
+  "integrations",
+  "ai",
+  "team",
+  "roles",
+  "api",
+  "audit",
+  "notifications",
+  "settings",
+  "subscription",
+]);
+
+// Audit logging
+export const auditCategoryEnum = pgEnum("audit_category", [
+  "auth",
+  "organization",
+  "clients",
+  "invoices",
+  "payments",
+  "expenses",
+  "inventory",
+  "purchasing",
+  "bookkeeping",
+  "reports",
+  "compliance",
+  "integrations",
+  "ai",
+  "team",
+  "roles",
+  "api",
+  "subscription",
+  "settings",
+  "notifications",
+  "tasks",
+]);
+
+// Notifications
+export const notificationCategoryEnum = pgEnum("notification_category", [
+  "inventory",
+  "finance",
+  "invoices",
+  "payments",
+  "compliance",
+  "security",
+  "subscriptions",
+  "ai",
+  "system",
+  "organization",
+]);
+
+export const notificationPriorityEnum = pgEnum("notification_priority", [
+  "low",
+  "normal",
+  "high",
+  "urgent",
+]);
+
+// Public API
+export const apiKeyStatusEnum = pgEnum("api_key_status", [
+  "active",
+  "inactive",
+  "revoked",
+]);
+
 // NextAuth tables
 export const users = pgTable("users", {
   id: text("id")
@@ -135,6 +234,9 @@ export const sessions = pgTable("sessions", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
 });
 
@@ -157,6 +259,9 @@ export const businesses = pgTable("businesses", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" })
     .unique(),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   type: text("type"),
   email: text("email"),
@@ -181,6 +286,9 @@ export const clients = pgTable("clients", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -203,6 +311,9 @@ export const clientLogs = pgTable("client_logs", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   type: text("type").notNull(), // email, call, meeting, note
   content: text("content").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -216,6 +327,9 @@ export const invoices = pgTable("invoices", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   clientId: text("client_id").references(() => clients.id, {
     onDelete: "set null",
   }),
@@ -259,6 +373,9 @@ export const payments = pgTable("payments", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   invoiceId: text("invoice_id").references(() => invoices.id, {
     onDelete: "set null",
   }),
@@ -286,6 +403,9 @@ export const expenses = pgTable("expenses", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   category: text("category").notNull(),
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
@@ -304,6 +424,9 @@ export const projects = pgTable("projects", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   clientId: text("client_id").references(() => clients.id, {
     onDelete: "set null",
   }),
@@ -321,6 +444,9 @@ export const tasks = pgTable("tasks", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   projectId: text("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
@@ -342,6 +468,9 @@ export const usageRecords = pgTable("usage_records", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   month: text("month").notNull(), // YYYY-MM
   invoicesCreated: integer("invoices_created").default(0).notNull(),
   aiRequests: integer("ai_requests").default(0).notNull(),
@@ -355,6 +484,9 @@ export const inventoryCategories = pgTable("inventory_categories", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   description: text("description"),
   type: inventoryItemTypeEnum("type").default("product").notNull(),
@@ -368,6 +500,9 @@ export const inventoryBrands = pgTable("inventory_brands", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -380,6 +515,9 @@ export const inventorySuppliers = pgTable("inventory_suppliers", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -396,6 +534,9 @@ export const inventoryWarehouses = pgTable("inventory_warehouses", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   location: text("location"),
   isDefault: boolean("is_default").default(false).notNull(),
@@ -409,6 +550,9 @@ export const inventoryProducts = pgTable("inventory_products", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   categoryId: text("category_id").references(() => inventoryCategories.id, {
     onDelete: "set null",
   }),
@@ -437,6 +581,9 @@ export const inventoryStock = pgTable("inventory_stock", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   productId: text("product_id")
     .notNull()
     .references(() => inventoryProducts.id, { onDelete: "cascade" }),
@@ -457,6 +604,9 @@ export const inventoryStockMovements = pgTable("inventory_stock_movements", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   productId: text("product_id")
     .notNull()
     .references(() => inventoryProducts.id, { onDelete: "cascade" }),
@@ -478,6 +628,9 @@ export const inventoryPurchaseOrders = pgTable("inventory_purchase_orders", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   supplierId: text("supplier_id").references(() => inventorySuppliers.id, {
     onDelete: "set null",
   }),
@@ -493,6 +646,9 @@ export const inventoryPurchaseOrderItems = pgTable("inventory_purchase_order_ite
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   purchaseOrderId: text("purchase_order_id")
     .notNull()
     .references(() => inventoryPurchaseOrders.id, { onDelete: "cascade" }),
@@ -511,6 +667,9 @@ export const inventoryStockAdjustments = pgTable("inventory_stock_adjustments", 
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   productId: text("product_id")
     .notNull()
     .references(() => inventoryProducts.id, { onDelete: "cascade" }),
@@ -530,6 +689,9 @@ export const chartOfAccounts = pgTable("chart_of_accounts", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   code: text("code").notNull(),
   name: text("name").notNull(),
   type: accountTypeEnum("type").notNull(),
@@ -545,6 +707,9 @@ export const journalEntries = pgTable("journal_entries", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   date: timestamp("date", { mode: "date" }).notNull(),
   description: text("description").notNull(),
   status: journalEntryStatusEnum("status").default("draft").notNull(),
@@ -555,6 +720,9 @@ export const journalEntryLines = pgTable("journal_entry_lines", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   journalEntryId: text("journal_entry_id")
     .notNull()
     .references(() => journalEntries.id, { onDelete: "cascade" }),
@@ -575,6 +743,9 @@ export const etimsConfig = pgTable("etims_config", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" })
     .unique(),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   tin: text("tin").notNull(),
   pin: text("pin").notNull(),
   deviceId: text("device_id").notNull(),
@@ -592,6 +763,9 @@ export const etimsInvoices = pgTable("etims_invoices", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   invoiceId: text("invoice_id")
     .notNull()
     .references(() => invoices.id, { onDelete: "cascade" }),
@@ -609,6 +783,9 @@ export const etimsComplianceLogs = pgTable("etims_compliance_logs", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   action: text("action").notNull(),
   details: jsonb("details").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -822,6 +999,414 @@ export const etimsComplianceLogsRelations = relations(etimsComplianceLogs, ({ on
   user: one(users, { fields: [etimsComplianceLogs.userId], references: [users.id] }),
 }));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 1 — MULTI-ORGANIZATION ARCHITECTURE
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Every organization is a fully isolated tenant. Business data is scoped by
+// `organizationId`. A `branches` reference is intentionally omitted for now but
+// the schema is branch-ready: organizations can later own branches, and data
+// tables can gain an optional `branchId` without breaking tenant isolation.
+export const organizations = pgTable("organizations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  // Billing/plan lives on the org so the whole tenant shares a subscription.
+  plan: planEnum("plan").default("free").notNull(),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const organizationMembers = pgTable(
+  "organization_members",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    // Null while the invite is pending (matched by email on first login).
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    email: text("email").notNull(),
+    name: text("name"),
+    // System role assigned to the member.
+    roleType: roleTypeEnum("role_type").default("employee").notNull(),
+    // Optional custom role that overrides the system role's permissions.
+    customRoleId: text("custom_role_id").references(() => roles.id, {
+      onDelete: "set null",
+    }),
+    status: memberStatusEnum("status").default("active").notNull(),
+    invitedBy: text("invited_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    joinedAt: timestamp("joined_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (member) => [
+    // A user can only belong to an organization once.
+    {
+      uniqueOrgUser: uniqueIndex("unique_org_user").on(
+        member.organizationId,
+        member.userId
+      ),
+    },
+  ]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 2 — ROLE-BASED ACCESS CONTROL (RBAC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Roles can be system roles (organization_id null, is_system true) or custom
+// org-specific roles. Permissions are stored as individual grant rows so every
+// permission is independently assignable.
+export const roles = pgTable(
+  "roles",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    description: text("description"),
+    // System roles are seeded and cannot be deleted; custom roles can.
+    isSystem: boolean("is_system").default(false).notNull(),
+    // For system roles, the canonical role type (owner, admin, ...).
+    type: roleTypeEnum("type"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (role) => [
+    {
+      uniqueOrgRole: uniqueIndex("unique_org_role").on(
+        role.organizationId,
+        role.name
+      ),
+    },
+  ]
+);
+
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    // Permission key, e.g. "invoices.create" (catalogued in src/lib/rbac).
+    permission: text("permission").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (rp) => [
+    {
+      uniqueRolePermission: uniqueIndex("unique_role_permission").on(
+        rp.roleId,
+        rp.permission
+      ),
+    },
+  ]
+);
+
+// Catalog of every permission in the system. Seeded from the code catalog in
+// src/lib/rbac/permissions.ts so the DB stays in sync with the source of truth.
+export const permissions = pgTable(
+  "permissions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    key: text("key").notNull().unique(),
+    category: permissionCategoryEnum("category").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+  },
+  (p) => [
+    {
+      uniquePermissionKey: uniqueIndex("unique_permission_key").on(p.key),
+    },
+  ]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 3 — COMPREHENSIVE AUDIT LOGGING
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Short action identifier, e.g. "invoice.create".
+    action: text("action").notNull(),
+    category: auditCategoryEnum("category").notNull(),
+    resourceType: text("resource_type"),
+    resourceId: text("resource_id"),
+    description: text("description"),
+    oldValues: jsonb("old_values").$type<Record<string, unknown>>(),
+    newValues: jsonb("new_values").$type<Record<string, unknown>>(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (log) => [
+    index("audit_org_created").on(log.organizationId, log.createdAt),
+    index("audit_resource").on(log.resourceType, log.resourceId),
+    index("audit_category").on(log.organizationId, log.category),
+  ]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 4 — INTELLIGENT NOTIFICATION CENTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    // Recipient user. Null = broadcast to the whole organization.
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    category: notificationCategoryEnum("category").notNull(),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    priority: notificationPriorityEnum("priority").default("normal").notNull(),
+    read: boolean("read").default(false).notNull(),
+    archived: boolean("archived").default(false).notNull(),
+    deepLink: text("deep_link"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (n) => [
+    index("notif_user_unread").on(n.userId, n.read, n.createdAt),
+    index("notif_org_created").on(n.organizationId, n.createdAt),
+  ]
+);
+
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: notificationCategoryEnum("category").notNull(),
+    inApp: boolean("in_app").default(true).notNull(),
+    email: boolean("email").default(false).notNull(),
+    push: boolean("push").default(false).notNull(),
+    sms: boolean("sms").default(false).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (np) => [
+    uniqueIndex("unique_notif_pref").on(
+      np.organizationId,
+      np.userId,
+      np.category
+    ),
+  ]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 5 — PUBLIC API FOUNDATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // First 8 chars of the secret, stored for display/identification only.
+    keyPrefix: text("key_prefix").notNull(),
+    // Bcrypt hash of the full secret. The plaintext secret is shown once.
+    secretHash: text("secret_hash").notNull(),
+    // OAuth-style scopes granted to this key (subset of permission keys).
+    scopes: jsonb("scopes").$type<string[]>().default([]).notNull(),
+    status: apiKeyStatusEnum("status").default("active").notNull(),
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    revokedBy: text("revoked_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (k) => [index("apikey_org").on(k.organizationId)]
+);
+
+export const apiUsage = pgTable(
+  "api_usage",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    method: text("method").notNull(),
+    statusCode: integer("status_code").notNull(),
+    responseTimeMs: integer("response_time_ms"),
+    ipAddress: text("ip_address"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (u) => [
+    index("apiusage_org_created").on(u.organizationId, u.createdAt),
+    index("apiusage_key_created").on(u.apiKeyId, u.createdAt),
+  ]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tenant scoping helper columns on existing business tables
+// ─────────────────────────────────────────────────────────────────────────────
+// `organizationId` is added to every business table so all data is isolated per
+// tenant. It is nullable at the DB level to keep `db:push` non-destructive; the
+// application always sets it from the session and the backfill script (see
+// scripts/backfill-organizations.mjs) attributes existing rows to a per-user
+// organization. New tables above require organizationId (empty tables).
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enterprise foundation relations
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const organizationsRelations = relations(organizations, ({ one, many }) => ({
+  owner: one(users, { fields: [organizations.ownerId], references: [users.id] }),
+  members: many(organizationMembers),
+  roles: many(roles),
+  apiKeys: many(apiKeys),
+}));
+
+export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationMembers.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [organizationMembers.userId],
+    references: [users.id],
+  }),
+  customRole: one(roles, {
+    fields: [organizationMembers.customRoleId],
+    references: [roles.id],
+  }),
+  inviter: one(users, {
+    fields: [organizationMembers.invitedBy],
+    references: [users.id],
+  }),
+}));
+
+export const rolesRelations = relations(roles, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [roles.organizationId],
+    references: [organizations.id],
+  }),
+  permissions: many(rolePermissions),
+  members: many(organizationMembers),
+}));
+
+export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
+  role: one(roles, {
+    fields: [rolePermissions.roleId],
+    references: [roles.id],
+  }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [auditLogs.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [notifications.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const notificationPreferencesRelations = relations(
+  notificationPreferences,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [notificationPreferences.organizationId],
+      references: [organizations.id],
+    }),
+    user: one(users, {
+      fields: [notificationPreferences.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const apiKeysRelations = relations(apiKeys, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [apiKeys.organizationId],
+    references: [organizations.id],
+  }),
+  usage: many(apiUsage),
+}));
+
+export const apiUsageRelations = relations(apiUsage, ({ one }) => ({
+  apiKey: one(apiKeys, {
+    fields: [apiUsage.apiKeyId],
+    references: [apiKeys.id],
+  }),
+  organization: one(organizations, {
+    fields: [apiUsage.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 // Types
 export type User = typeof users.$inferSelect;
 export type Business = typeof businesses.$inferSelect;
@@ -848,3 +1433,27 @@ export type JournalEntryLine = typeof journalEntryLines.$inferSelect;
 export type EtimsConfig = typeof etimsConfig.$inferSelect;
 export type EtimsInvoice = typeof etimsInvoices.$inferSelect;
 export type EtimsComplianceLog = typeof etimsComplianceLogs.$inferSelect;
+
+// Enterprise foundation types
+export type Organization = typeof organizations.$inferSelect;
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+export type Role = typeof roles.$inferSelect;
+export type RolePermission = typeof rolePermissions.$inferSelect;
+export type Permission = typeof permissions.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type ApiUsage = typeof apiUsage.$inferSelect;
+
+// Enterprise foundation enums (TypeScript unions)
+export type RoleType = (typeof roleTypeEnum.enumValues)[number];
+export type MemberStatus = (typeof memberStatusEnum.enumValues)[number];
+export type PermissionCategory =
+  (typeof permissionCategoryEnum.enumValues)[number];
+export type AuditCategory = (typeof auditCategoryEnum.enumValues)[number];
+export type NotificationCategory =
+  (typeof notificationCategoryEnum.enumValues)[number];
+export type NotificationPriority =
+  (typeof notificationPriorityEnum.enumValues)[number];
+export type ApiKeyStatus = (typeof apiKeyStatusEnum.enumValues)[number];

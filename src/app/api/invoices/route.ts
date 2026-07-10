@@ -1,36 +1,36 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { invoices, invoiceItems, clients, usageRecords } from "@/db/schema";
 import { invoiceSchema } from "@/lib/validations";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import {
   generateInvoiceNumber,
   getCurrentMonth,
   PLAN_LIMITS,
   type PlanType,
 } from "@/lib/utils";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "invoices.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
-  const userInvoices = await db.query.invoices.findMany({
-    where: eq(invoices.userId, session.user.id),
+  const rows = await db.query.invoices.findMany({
+    where: eq(invoices.organizationId, ctx.organizationId),
     orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
     with: { client: true, items: true },
   });
 
-  return NextResponse.json(userInvoices);
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "invoices.create");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -43,15 +43,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check freemium limits
-    const plan = (session.user.plan || "free") as PlanType;
+    const plan = (ctx.organization.plan || "free") as PlanType;
     const limits = PLAN_LIMITS[plan];
 
     if (limits.invoicesPerMonth !== Infinity) {
       const month = getCurrentMonth();
       const usage = await db.query.usageRecords.findFirst({
         where: and(
-          eq(usageRecords.userId, session.user.id),
+          eq(usageRecords.organizationId, ctx.organizationId),
           eq(usageRecords.month, month)
         ),
       });
@@ -78,7 +77,8 @@ export async function POST(req: Request) {
     const [invoice] = await db
       .insert(invoices)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         clientId: invoiceData.clientId || null,
         invoiceNumber: generateInvoiceNumber(),
         issueDate: invoiceData.issueDate,
@@ -106,11 +106,10 @@ export async function POST(req: Request) {
       }))
     );
 
-    // Update usage
     const month = getCurrentMonth();
     const existingUsage = await db.query.usageRecords.findFirst({
       where: and(
-        eq(usageRecords.userId, session.user.id),
+        eq(usageRecords.organizationId, ctx.organizationId),
         eq(usageRecords.month, month)
       ),
     });
@@ -122,11 +121,31 @@ export async function POST(req: Request) {
         .where(eq(usageRecords.id, existingUsage.id));
     } else {
       await db.insert(usageRecords).values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         month,
         invoicesCreated: 1,
       });
     }
+
+    await logAuditSafe(ctx, {
+      action: "invoice.create",
+      category: "invoices",
+      resourceType: "invoice",
+      resourceId: invoice.id,
+      description: `Created invoice ${invoice.invoiceNumber}`,
+      newValues: { invoiceNumber: invoice.invoiceNumber, total: invoice.total },
+    });
+
+    await createNotification({
+      organizationId: ctx.organizationId,
+      category: "invoices",
+      type: "invoice_created",
+      title: "Invoice created",
+      message: `Invoice ${invoice.invoiceNumber} was created${body.send ? " and sent" : ""}.`,
+      priority: "normal",
+      deepLink: `/dashboard/invoices/${invoice.id}`,
+    });
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {

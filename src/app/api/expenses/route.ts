@@ -1,29 +1,29 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { expenses } from "@/db/schema";
 import { expenseSchema } from "@/lib/validations";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "expenses.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
-  const userExpenses = await db.query.expenses.findMany({
-    where: eq(expenses.userId, session.user.id),
+  const rows = await db.query.expenses.findMany({
+    where: eq(expenses.organizationId, ctx.organizationId),
     orderBy: (expenses, { desc }) => [desc(expenses.date)],
   });
 
-  return NextResponse.json(userExpenses);
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "expenses.create");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -39,11 +39,30 @@ export async function POST(req: Request) {
     const [expense] = await db
       .insert(expenses)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         ...parsed.data,
         amount: parsed.data.amount.toFixed(2),
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "expense.create",
+      category: "expenses",
+      resourceType: "expense",
+      resourceId: expense.id,
+      description: `Added expense ${expense.description}`,
+      newValues: { amount: expense.amount, category: expense.category },
+    });
+
+    await createNotification({
+      organizationId: ctx.organizationId,
+      category: "finance",
+      type: "expense_added",
+      title: "Expense added",
+      message: `Expense "${expense.description}" of ${expense.amount} added.`,
+      deepLink: "/dashboard/expenses",
+    });
 
     return NextResponse.json(expense, { status: 201 });
   } catch (error) {

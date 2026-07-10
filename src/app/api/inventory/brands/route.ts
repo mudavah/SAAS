@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { inventoryBrands } from "@/db/schema";
 import { inventoryBrandSchema } from "@/lib/validations";
 import { eq, asc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "inventory.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const brands = await db.query.inventoryBrands.findMany({
-    where: eq(inventoryBrands.userId, session.user.id),
+    where: eq(inventoryBrands.organizationId, ctx.organizationId),
     orderBy: (brands) => [asc(brands.name)],
   });
 
@@ -20,10 +20,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.products.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -39,10 +38,20 @@ export async function POST(req: Request) {
     const [brand] = await db
       .insert(inventoryBrands)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         ...parsed.data,
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "inventory_brand.create",
+      category: "inventory",
+      resourceType: "inventory_brand",
+      resourceId: brand.id,
+      description: `Created inventory brand ${brand.name}`,
+      newValues: { name: brand.name },
+    });
 
     return NextResponse.json(brand, { status: 201 });
   } catch (error) {

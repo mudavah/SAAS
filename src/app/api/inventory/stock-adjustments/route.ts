@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { inventoryStockAdjustments, inventoryStock, inventoryProducts } from "@/db/schema";
 import { inventoryStockAdjustmentSchema } from "@/lib/validations";
 import { eq, and, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "inventory.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const adjustments = await db.query.inventoryStockAdjustments.findMany({
-    where: eq(inventoryStockAdjustments.userId, session.user.id),
+    where: eq(inventoryStockAdjustments.organizationId, ctx.organizationId),
     orderBy: (adjustments) => [desc(adjustments.createdAt)],
     with: {
       product: true,
@@ -23,10 +24,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.stock.adjust");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     const productResult = await db.query.inventoryProducts.findFirst({
       where: and(
         eq(inventoryProducts.id, parsed.data.productId),
-        eq(inventoryProducts.userId, session.user.id)
+        eq(inventoryProducts.organizationId, ctx.organizationId)
       ),
       with: { stock: true },
     });
@@ -59,7 +59,8 @@ export async function POST(req: Request) {
     const [adjustment] = await db
       .insert(inventoryStockAdjustments)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         productId: parsed.data.productId,
         warehouseId: parsed.data.warehouseId,
         quantity: parsed.data.quantity.toString(),
@@ -79,6 +80,28 @@ export async function POST(req: Request) {
         .update(inventoryStock)
         .set({ quantity: finalQty.toFixed(2), updatedAt: new Date() })
         .where(eq(inventoryStock.id, stockResult.id));
+    }
+
+    await logAuditSafe(ctx, {
+      action: "inventory_stock_adjustment.create",
+      category: "inventory",
+      resourceType: "inventory_stock_adjustment",
+      resourceId: adjustment.id,
+      description: `Adjusted stock for ${productResult.name} by ${parsed.data.quantity}`,
+      newValues: { productId: parsed.data.productId, quantity: parsed.data.quantity, finalQuantity: finalQty.toFixed(2) },
+    });
+
+    const minStockLevel = productResult.minStockLevel || 0;
+    if (finalQty <= minStockLevel) {
+      await createNotification({
+        organizationId: ctx.organizationId,
+        category: "inventory",
+        type: "low_stock",
+        title: "Low stock alert",
+        message: `Stock for ${productResult.name} is low.`,
+        priority: "high",
+        deepLink: "/dashboard/inventory/products",
+      });
     }
 
     return NextResponse.json(adjustment, { status: 201 });

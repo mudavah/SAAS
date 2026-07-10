@@ -4,8 +4,9 @@ import { invoices, clients, payments, expenses } from "@/db/schema";
 import { eq, and, gte, sql, count, sum } from "drizzle-orm";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { DashboardOverview } from "@/components/dashboard/overview";
+import { getActiveOrganization } from "@/lib/org";
 
-async function getDashboardStats(userId: string) {
+async function getDashboardStats(organizationId: string) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -16,20 +17,20 @@ async function getDashboardStats(userId: string) {
         .from(invoices)
         .where(
           and(
-            eq(invoices.userId, userId),
+            eq(invoices.organizationId, organizationId),
             sql`${invoices.status} IN ('sent', 'viewed', 'partial', 'overdue')`
           )
         ),
       db
         .select({ count: count() })
         .from(clients)
-        .where(eq(clients.userId, userId)),
+        .where(eq(clients.organizationId, organizationId)),
       db
         .select({ total: sum(payments.amount) })
         .from(payments)
         .where(
           and(
-            eq(payments.userId, userId),
+            eq(payments.organizationId, organizationId),
             eq(payments.status, "completed"),
             gte(payments.createdAt, startOfMonth)
           )
@@ -38,17 +39,15 @@ async function getDashboardStats(userId: string) {
         .select({ total: sum(expenses.amount) })
         .from(expenses)
         .where(
-          and(eq(expenses.userId, userId), gte(expenses.date, startOfMonth))
+          and(eq(expenses.organizationId, organizationId), gte(expenses.date, startOfMonth))
         ),
     ]);
 
   const recentInvoices = await db.query.invoices.findMany({
-    where: eq(invoices.userId, userId),
+    where: eq(invoices.organizationId, organizationId),
     orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
     limit: 5,
-    with: {
-      client: true,
-    },
+    with: { client: true },
   });
 
   return {
@@ -62,11 +61,16 @@ async function getDashboardStats(userId: string) {
 
 export default async function DashboardPage() {
   const session = await auth();
-  const stats = await getDashboardStats(session!.user!.id);
+  if (!session?.user?.id) return null;
+
+  const org = await getActiveOrganization(session.user.id);
+  if (!org) return null;
+
+  const stats = await getDashboardStats(org.organization.id);
 
   return (
     <DashboardShell>
-      <DashboardOverview stats={stats} userName={session!.user!.name || ""} />
+      <DashboardOverview stats={stats} userName={session.user.name || ""} />
     </DashboardShell>
   );
 }

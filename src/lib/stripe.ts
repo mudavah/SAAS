@@ -78,7 +78,8 @@ export async function createCheckoutSession(
   customerId: string,
   priceId: string,
   userId: string,
-  plan: "pro" | "business"
+  plan: "pro" | "business",
+  organizationId?: string
 ) {
   if (!stripe) {
     throw new Error(
@@ -95,9 +96,9 @@ export async function createCheckoutSession(
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${appUrl}/dashboard/settings?success=true&plan=${plan}`,
     cancel_url: `${appUrl}/dashboard/settings?cancelled=true`,
-    metadata: { userId, plan },
+    metadata: { userId, plan, organizationId: organizationId ?? "" },
     subscription_data: {
-      metadata: { userId, plan },
+      metadata: { userId, plan, organizationId: organizationId ?? "" },
     },
   });
 }

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import {
   inventoryPurchaseOrders,
@@ -11,15 +10,16 @@ import {
 } from "@/db/schema";
 import { inventoryPurchaseOrderSchema } from "@/lib/validations";
 import { eq, and, asc, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "purchasing.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const orders = await db.query.inventoryPurchaseOrders.findMany({
-    where: eq(inventoryPurchaseOrders.userId, session.user.id),
+    where: eq(inventoryPurchaseOrders.organizationId, ctx.organizationId),
     orderBy: (orders) => [desc(orders.createdAt)],
     with: {
       supplier: true,
@@ -35,10 +35,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "purchasing.create");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -54,7 +53,8 @@ export async function POST(req: Request) {
     const [order] = await db
       .insert(inventoryPurchaseOrders)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         supplierId: parsed.data.supplierId || null,
         status: parsed.data.status,
         orderDate: parsed.data.orderDate,
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
       .returning();
 
     const items = parsed.data.items.map((item) => ({
+      organizationId: ctx.organizationId,
       purchaseOrderId: order.id,
       productId: item.productId,
       quantity: item.quantity.toString(),
@@ -72,6 +73,15 @@ export async function POST(req: Request) {
     }));
 
     await db.insert(inventoryPurchaseOrderItems).values(items);
+
+    await logAuditSafe(ctx, {
+      action: "inventory_purchase_order.create",
+      category: "purchasing",
+      resourceType: "inventory_purchase_order",
+      resourceId: order.id,
+      description: `Created purchase order ${order.id}`,
+      newValues: { status: order.status, supplierId: order.supplierId },
+    });
 
     return NextResponse.json(order, { status: 201 });
   } catch (error) {

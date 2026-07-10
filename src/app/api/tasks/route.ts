@@ -1,29 +1,28 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { taskSchema } from "@/lib/validations";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "tasks.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
-  const userTasks = await db.query.tasks.findMany({
-    where: eq(tasks.userId, session.user.id),
+  const rows = await db.query.tasks.findMany({
+    where: eq(tasks.organizationId, ctx.organizationId),
     orderBy: (tasks, { desc }) => [desc(tasks.createdAt)],
   });
 
-  return NextResponse.json(userTasks);
+  return NextResponse.json(rows);
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "tasks.create");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -39,11 +38,21 @@ export async function POST(req: Request) {
     const [task] = await db
       .insert(tasks)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         ...parsed.data,
         projectId: parsed.data.projectId || null,
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "task.create",
+      category: "tasks",
+      resourceType: "task",
+      resourceId: task.id,
+      description: `Created task ${task.title}`,
+      newValues: { title: task.title, priority: task.priority },
+    });
 
     return NextResponse.json(task, { status: 201 });
   } catch (error) {

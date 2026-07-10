@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { invoices, businesses } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -7,15 +6,17 @@ import { sendInvoiceEmail, isEmailConfigured } from "@/lib/email";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { generateInvoicePdf } from "@/lib/pdf";
 import { buildInvoicePdfPayload } from "@/lib/invoice-pdf-data";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "invoices.send");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   if (!isEmailConfigured()) {
     return NextResponse.json(
@@ -30,7 +31,7 @@ export async function POST(
   const { id } = await params;
 
   const invoice = await db.query.invoices.findFirst({
-    where: and(eq(invoices.id, id), eq(invoices.userId, session.user.id)),
+    where: and(eq(invoices.id, id), eq(invoices.organizationId, ctx.organizationId)),
     with: { client: true, items: true },
   });
 
@@ -46,14 +47,14 @@ export async function POST(
   }
 
   const business = await db.query.businesses.findFirst({
-    where: eq(businesses.userId, session.user.id),
+    where: eq(businesses.organizationId, ctx.organizationId),
   });
 
-  const businessName = business?.name || session.user.name || "Business";
+  const businessName = business?.name || ctx.name || "Business";
   const pdfPayload = buildInvoicePdfPayload(
     invoice,
     business,
-    session.user.name || "Business"
+    ctx.name || "Business"
   );
   const pdfBuffer = generateInvoicePdf(pdfPayload);
 
@@ -87,6 +88,24 @@ export async function POST(
     .update(invoices)
     .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
     .where(eq(invoices.id, id));
+
+  await logAuditSafe(ctx, {
+    action: "invoice.send",
+    category: "invoices",
+    resourceType: "invoice",
+    resourceId: invoice.id,
+    description: `Sent invoice ${invoice.invoiceNumber} to client`,
+    newValues: { status: "sent", sentAt: new Date() },
+  });
+
+  await createNotification({
+    organizationId: ctx.organizationId,
+    category: "invoices",
+    type: "invoice_sent",
+    title: "Invoice sent",
+    message: `Invoice ${invoice.invoiceNumber} sent to client.`,
+    deepLink: `/dashboard/invoices/${invoice.id}`,
+  });
 
   return NextResponse.json({
     success: true,

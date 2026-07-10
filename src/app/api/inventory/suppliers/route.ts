@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { inventorySuppliers } from "@/db/schema";
 import { inventorySupplierSchema } from "@/lib/validations";
 import { eq, asc } from "drizzle-orm";
+import { requireApiContext } from "@/lib/session";
+import { logAuditSafe } from "@/lib/audit";
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const res = await requireApiContext(req, "inventory.view");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   const suppliers = await db.query.inventorySuppliers.findMany({
-    where: eq(inventorySuppliers.userId, session.user.id),
+    where: eq(inventorySuppliers.organizationId, ctx.organizationId),
     orderBy: (suppliers) => [asc(suppliers.name)],
   });
 
@@ -20,10 +20,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const res = await requireApiContext(req, "inventory.products.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
 
   try {
     const body = await req.json();
@@ -39,10 +38,20 @@ export async function POST(req: Request) {
     const [supplier] = await db
       .insert(inventorySuppliers)
       .values({
-        userId: session.user.id,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId!,
         ...parsed.data,
       })
       .returning();
+
+    await logAuditSafe(ctx, {
+      action: "inventory_supplier.create",
+      category: "inventory",
+      resourceType: "inventory_supplier",
+      resourceId: supplier.id,
+      description: `Created inventory supplier ${supplier.name}`,
+      newValues: { name: supplier.name },
+    });
 
     return NextResponse.json(supplier, { status: 201 });
   } catch (error) {
