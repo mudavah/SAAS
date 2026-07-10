@@ -29,10 +29,10 @@ export function formatDate(date: Date | string): string {
 
 export function generateInvoiceNumber(prefix = "INV"): string {
   const year = new Date().getFullYear();
-  const random = Math.floor(Math.random() * 10000)
-    .toString()
-    .padStart(4, "0");
-  return `${prefix}-${year}-${random}`;
+  const random = crypto.getRandomValues(new Uint8Array(4))
+    .reduce((acc, b) => acc + b.toString(16).padStart(2, "0"), "")
+    .slice(0, 8);
+  return `${prefix}-${year}-${random}`.toUpperCase();
 }
 
 export function getCurrentMonth(): string {

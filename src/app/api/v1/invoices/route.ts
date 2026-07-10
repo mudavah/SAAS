@@ -8,10 +8,10 @@ import {
   type ServerContext,
 } from "@/lib/session";
 import { generateInvoiceNumber, getCurrentMonth, PLAN_LIMITS } from "@/lib/utils";
-import { API_CORS_HEADERS, corsResponse } from "@/lib/api/cors";
+import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
 
-export async function OPTIONS() {
-  return corsResponse(null, 204);
+export async function OPTIONS(req: Request) {
+  return corsResponse(null, 204, req);
 }
 
 export async function GET(req: Request) {
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       with: { client: true, items: true },
       limit: 100,
     });
-    return NextResponse.json({ invoices: rows }, { headers: API_CORS_HEADERS });
+    return NextResponse.json({ invoices: rows }, { headers: getCorsHeaders(req) });
   });
 }
 
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       if (!parsed.success) {
         return NextResponse.json(
           { error: parsed.error.errors[0].message },
-          { status: 400, headers: API_CORS_HEADERS }
+          { status: 400, headers: getCorsHeaders(req) }
         );
       }
 
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         if (count >= limits.invoicesPerMonth) {
           return NextResponse.json(
             { error: "Plan invoice limit reached." },
-            { status: 403, headers: API_CORS_HEADERS }
+            { status: 403, headers: getCorsHeaders(req) }
           );
         }
       }
@@ -96,13 +96,13 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         { invoice },
-        { status: 201, headers: API_CORS_HEADERS }
+        { status: 201, headers: getCorsHeaders(req) }
       );
     } catch (error) {
       console.error("API create invoice error:", error);
       return NextResponse.json(
         { error: "Internal server error" },
-        { status: 500, headers: API_CORS_HEADERS }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
   });

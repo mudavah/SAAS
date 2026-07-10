@@ -334,36 +334,42 @@ export const clientLogs = pgTable("client_logs", {
 });
 
 // Invoices
-export const invoices = pgTable("invoices", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  organizationId: text("organization_id").references(() => organizations.id, {
-    onDelete: "cascade",
-  }),
-  clientId: text("client_id").references(() => clients.id, {
-    onDelete: "set null",
-  }),
-  invoiceNumber: text("invoice_number").notNull(),
-  status: invoiceStatusEnum("status").default("draft").notNull(),
-  issueDate: timestamp("issue_date", { mode: "date" }).notNull(),
-  dueDate: timestamp("due_date", { mode: "date" }).notNull(),
-  currency: text("currency").default("KES").notNull(),
-  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
-  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
-  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default("0"),
-  total: decimal("total", { precision: 12, scale: 2 }).notNull(),
-  amountPaid: decimal("amount_paid", { precision: 12, scale: 2 }).default("0"),
-  notes: text("notes"),
-  terms: text("terms"),
-  sentAt: timestamp("sent_at", { mode: "date" }),
-  paidAt: timestamp("paid_at", { mode: "date" }),
-  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    clientId: text("client_id").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+    invoiceNumber: text("invoice_number").notNull(),
+    status: invoiceStatusEnum("status").default("draft").notNull(),
+    issueDate: timestamp("issue_date", { mode: "date" }).notNull(),
+    dueDate: timestamp("due_date", { mode: "date" }).notNull(),
+    currency: text("currency").default("KES").notNull(),
+    subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+    taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default("0"),
+    total: decimal("total", { precision: 12, scale: 2 }).notNull(),
+    amountPaid: decimal("amount_paid", { precision: 12, scale: 2 }).default("0"),
+    notes: text("notes"),
+    terms: text("terms"),
+    sentAt: timestamp("sent_at", { mode: "date" }),
+    paidAt: timestamp("paid_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (invoices) => [
+    uniqueIndex("unique_org_invoice_number").on(invoices.organizationId, invoices.invoiceNumber),
+  ]
+);
 
 export const invoiceItems = pgTable("invoice_items", {
   id: text("id")

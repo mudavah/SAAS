@@ -4,6 +4,8 @@ import { invoices } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { invoiceUpdateSchema } from "@/lib/validations";
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -36,10 +38,27 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
+  const parsed = invoiceUpdateSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0].message },
+      { status: 400 }
+    );
+  }
+
+  const updateData: Record<string, unknown> = {
+    ...parsed.data,
+    updatedAt: new Date(),
+  };
+
+  if (typeof updateData.taxRate === "number") {
+    updateData.taxRate = updateData.taxRate.toFixed(2);
+  }
 
   const [updated] = await db
     .update(invoices)
-    .set({ ...body, updatedAt: new Date() })
+    .set(updateData)
     .where(and(eq(invoices.id, id), eq(invoices.organizationId, ctx.organizationId)))
     .returning();
 
@@ -53,7 +72,7 @@ export async function PATCH(
     resourceType: "invoice",
     resourceId: updated.id,
     description: `Updated invoice ${updated.invoiceNumber}`,
-    newValues: body,
+    newValues: parsed.data,
   });
 
   return NextResponse.json(updated);

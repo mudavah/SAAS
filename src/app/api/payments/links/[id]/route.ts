@@ -26,7 +26,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: "Payment link has reached maximum uses" }, { status: 410 });
   }
 
-  return NextResponse.json({ link });
+  const publicLink = {
+    type: link.type,
+    amount: link.amount,
+    currency: link.currency,
+    description: link.description,
+    provider: link.provider,
+    expiresAt: link.expiresAt,
+    maxUses: link.maxUses,
+    useCount: link.useCount,
+    isActive: link.isActive,
+    slug: link.slug,
+    createdAt: link.createdAt,
+  };
+
+  return NextResponse.json(publicLink);
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {

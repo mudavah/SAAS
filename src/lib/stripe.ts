@@ -1,10 +1,6 @@
 import Stripe from "stripe";
 import type { PlanType } from "@/lib/utils";
-
-function isPlaceholder(value?: string): boolean {
-  if (!value) return true;
-  return value.includes("...") || value.endsWith("_");
-}
+import { isPlaceholder } from "@/lib/validation-helpers";
 
 function isValidSecretKey(key?: string): boolean {
   return !!(

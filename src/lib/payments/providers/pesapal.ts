@@ -121,9 +121,10 @@ export class PesapalProvider implements PaymentProvider {
   async verifyPayment(input: VerifyPaymentInput): Promise<VerifyPaymentResult> {
     try {
       const token = await this.getAuthToken();
+      const baseUrl = this.getBaseUrl().replace("PostPesapalDirectOrderV4", "");
 
       const res = await fetch(
-        `https://demo.pesapal.com/api/Transactions/GetTransactionStatus?orderTrackingId=${input.providerPaymentId}&merchantReference=${input.reference || ""}`,
+        `${baseUrl}Transactions/GetTransactionStatus?orderTrackingId=${input.providerPaymentId}&merchantReference=${input.reference || ""}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -163,9 +164,10 @@ export class PesapalProvider implements PaymentProvider {
   async cancelPending(input: CancelPendingInput): Promise<CancelPendingResult> {
     try {
       const token = await this.getAuthToken();
+      const baseUrl = this.getBaseUrl().replace("PostPesapalDirectOrderV4", "");
 
       const res = await fetch(
-        `https://demo.pesapal.com/api/Transactions/CancelTransaction?orderTrackingId=${input.providerPaymentId}`,
+        `${baseUrl}Transactions/CancelTransaction?orderTrackingId=${input.providerPaymentId}`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -188,8 +190,9 @@ export class PesapalProvider implements PaymentProvider {
   async refund(input: RefundInput): Promise<RefundResult> {
     try {
       const token = await this.getAuthToken();
+      const baseUrl = this.getBaseUrl().replace("PostPesapalDirectOrderV4", "");
 
-      const res = await fetch("https://demo.pesapal.com/api/Transactions/Refund", {
+      const res = await fetch(`${baseUrl}Transactions/Refund`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

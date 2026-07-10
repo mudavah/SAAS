@@ -3,11 +3,7 @@ import {
   invoiceEmailHtml,
   passwordResetEmailHtml,
 } from "./templates";
-
-function isPlaceholder(value?: string): boolean {
-  if (!value) return true;
-  return value.includes("...") || value.trim() === "";
-}
+import { isPlaceholder } from "@/lib/validation-helpers";
 
 export function isEmailConfigured(): boolean {
   const key = process.env.RESEND_API_KEY;
@@ -15,12 +11,10 @@ export function isEmailConfigured(): boolean {
 }
 
 export function getEmailFrom(): string {
-  // Resend test sender — works without domain verification (testing only)
   const testFrom = "KaziFlow <onboarding@resend.dev>";
 
   const configured = process.env.EMAIL_FROM?.trim();
-  if (!configured || configured.includes("kaziflow.co.ke")) {
-    // Default placeholder domain — use Resend test address until user verifies their domain
+  if (!configured || isPlaceholder(configured)) {
     return testFrom;
   }
 

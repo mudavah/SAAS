@@ -17,7 +17,7 @@ import {
   type NotificationCategory,
   type NotificationPriority,
 } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { sendNotificationEmail } from "@/lib/email";
 
 export interface CreateNotificationInput {
@@ -181,8 +181,8 @@ export async function getUnreadCount(
   organizationId: string,
   userId: string
 ): Promise<number> {
-  const rows = await db
-    .select({ count: notifications.id })
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
     .from(notifications)
     .where(
       and(
@@ -192,7 +192,7 @@ export async function getUnreadCount(
         eq(notifications.archived, false)
       )
     );
-  return rows.length;
+  return Number(result[0]?.count || 0);
 }
 
 export async function listNotifications(

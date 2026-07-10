@@ -14,15 +14,13 @@ export default auth((req) => {
   const isOnboarding = pathname === "/onboarding";
   const isApiAuth = pathname.startsWith("/api/auth");
   const isMpesaCallback = pathname === "/api/mpesa/callback" || pathname.startsWith("/api/payments/webhooks/mpesa");
-  const isStripeWebhook = pathname === "/api/stripe/webhook" || pathname.startsWith("/api/payments/webhooks/stripe");
-  const isPesapalWebhook = pathname.startsWith("/api/payments/webhooks/pesapal");
   const isPaymentWebhooks = pathname.startsWith("/api/payments/webhooks");
   // Public API routes authenticate via API keys inside the handler.
   const isPublicApi = pathname.startsWith("/api/v1");
   const isApi = pathname.startsWith("/api");
 
   // These endpoints authenticate themselves — never redirect them.
-  if (isApiAuth || isMpesaCallback || isStripeWebhook || isPesapalWebhook || isPaymentWebhooks || isPublicApi) {
+  if (isApiAuth || isMpesaCallback || isPaymentWebhooks || isPublicApi) {
     return NextResponse.next();
   }
 

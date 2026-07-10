@@ -77,8 +77,11 @@ export class MpesaProvider implements PaymentProvider {
     try {
       if (input.checkoutRequestId) {
         const token = await getMpesaAccessToken();
+        const baseUrl = process.env.MPESA_ENV === "production"
+          ? "https://api.safaricom.co.ke"
+          : "https://sandbox.safaricom.co.ke";
         const res = await fetch(
-          `https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query`,
+          `${baseUrl}/mpesa/stkpushquery/v1/query`,
           {
             method: "POST",
             headers: {
@@ -146,8 +149,11 @@ export class MpesaProvider implements PaymentProvider {
   async cancelPending(input: CancelPendingInput): Promise<CancelPendingResult> {
     try {
       const token = await getMpesaAccessToken();
+      const baseUrl = process.env.MPESA_ENV === "production"
+        ? "https://api.safaricom.co.ke"
+        : "https://sandbox.safaricom.co.ke";
       const res = await fetch(
-        `https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/cancel`,
+        `${baseUrl}/mpesa/stkpushquery/v1/cancel`,
         {
           method: "POST",
           headers: {
@@ -182,8 +188,11 @@ export class MpesaProvider implements PaymentProvider {
   async refund(input: RefundInput): Promise<RefundResult> {
     try {
       const token = await getMpesaAccessToken();
+      const baseUrl = process.env.MPESA_ENV === "production"
+        ? "https://api.safaricom.co.ke"
+        : "https://sandbox.safaricom.co.ke";
       const res = await fetch(
-        `https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentreversal`,
+        `${baseUrl}/mpesa/b2c/v1/paymentreversal`,
         {
           method: "POST",
           headers: {

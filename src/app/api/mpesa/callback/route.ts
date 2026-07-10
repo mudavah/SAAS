@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { parseMpesaCallback } from "@/lib/mpesa";
-import { eq } from "drizzle-orm";
-import { payments } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import { payments, invoices } from "@/db/schema";
 import { verifyPayment } from "@/lib/payments/engine";
 import { createNotification } from "@/lib/notifications";
 
@@ -20,33 +20,57 @@ export async function POST(req: Request) {
       where: eq(payments.reference, result.checkoutRequestId),
     });
 
-    if (payment && payment.status === "pending") {
-      const { result: verifyResult } = await verifyPayment(
-        { provider: "mpesa", checkoutRequestId: result.checkoutRequestId },
-        { userId: payment.userId, organizationId: payment.organizationId || "" }
-      );
+    if (!payment || payment.status !== "pending") {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
+    }
 
-      if (verifyResult.success) {
-        await db
-          .update(payments)
-          .set({
-            status: "completed",
-            mpesaReceipt: result.mpesaReceiptNumber,
-            paidAt: new Date(),
-          })
-          .where(eq(payments.id, payment.id));
+    const { result: verifyResult } = await verifyPayment(
+      { provider: "mpesa", checkoutRequestId: result.checkoutRequestId },
+      { userId: payment.userId, organizationId: payment.organizationId || "" }
+    );
 
-        if (payment.organizationId) {
-          await createNotification({
-            organizationId: payment.organizationId,
-            category: "payments",
-            type: "mpesa_success",
-            title: "M-Pesa payment successful",
-            message: `Received M-Pesa payment of ${result.amount?.toFixed(2)}.`,
-            priority: "high",
-            deepLink: "/dashboard/payments",
-          });
+    if (verifyResult.success) {
+      await db
+        .update(payments)
+        .set({
+          status: "completed",
+          mpesaReceipt: result.mpesaReceiptNumber,
+          paidAt: new Date(),
+        })
+        .where(eq(payments.id, payment.id));
+
+      if (payment.invoiceId && payment.organizationId && result.amount) {
+        const invoice = await db.query.invoices.findFirst({
+          where: and(
+            eq(invoices.id, payment.invoiceId),
+            eq(invoices.organizationId, payment.organizationId)
+          ),
+        });
+        if (invoice) {
+          const newPaid = Math.min(parseFloat(invoice.amountPaid || "0") + result.amount, parseFloat(invoice.total));
+          const total = parseFloat(invoice.total);
+          await db
+            .update(invoices)
+            .set({
+              amountPaid: newPaid.toFixed(2),
+              status: newPaid >= total ? "paid" : "partial",
+              paidAt: newPaid >= total ? new Date() : null,
+              updatedAt: new Date(),
+            })
+            .where(eq(invoices.id, payment.invoiceId));
         }
+      }
+
+      if (payment.organizationId) {
+        await createNotification({
+          organizationId: payment.organizationId,
+          category: "payments",
+          type: "mpesa_success",
+          title: "M-Pesa payment successful",
+          message: `Received M-Pesa payment of ${result.amount?.toFixed(2)}.`,
+          priority: "high",
+          deepLink: "/dashboard/payments",
+        });
       }
     }
 

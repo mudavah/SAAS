@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getApiContext } from "@/lib/session";
-import { API_CORS_HEADERS, corsResponse } from "@/lib/api/cors";
+import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
 
 // CORS preflight
-export async function OPTIONS() {
-  return corsResponse(null, 204);
+export async function OPTIONS(req: Request) {
+  return corsResponse(null, 204, req);
 }
 
 export async function GET(req: Request) {
@@ -17,6 +17,6 @@ export async function GET(req: Request) {
       version: "v1",
       organization: res.ctx.organizationId,
     },
-    { headers: API_CORS_HEADERS }
+    { headers: getCorsHeaders(req) }
   );
 }

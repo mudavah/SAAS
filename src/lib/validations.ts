@@ -69,6 +69,8 @@ export const invoiceSchema = z.object({
   items: z.array(invoiceItemSchema).min(1, "Add at least one item"),
 });
 
+export const invoiceUpdateSchema = invoiceSchema.partial().omit({ items: true });
+
 export const expenseSchema = z.object({
   category: z.string().min(1, "Category is required"),
   description: z.string().min(1, "Description is required"),

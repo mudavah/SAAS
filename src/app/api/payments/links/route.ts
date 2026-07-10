@@ -7,11 +7,9 @@ import { requireApiContext } from "@/lib/session";
 
 function generateSlug(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  const random = crypto.getRandomValues(new Uint8Array(8))
+    .reduce((acc, b) => acc + chars[b % chars.length], "");
+  return random;
 }
 
 export async function GET(req: Request) {

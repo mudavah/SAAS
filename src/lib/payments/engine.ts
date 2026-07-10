@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { payments, invoices, organizations } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { type PaymentProvider, type PaymentProviderType, type CreatePaymentInput, type CreatePaymentResult, type VerifyPaymentInput, type VerifyPaymentResult, type RefundInput, type RefundResult, type CheckStatusInput, type CheckStatusResult, type CancelPendingInput, type CancelPendingResult, type ProviderConfig, type PaymentWebhookEvent, type PaymentAutomationContext, PaymentEngineError } from "./types";
 import { MpesaProvider } from "./providers/mpesa";
 import { StripeProvider } from "./providers/stripe";
@@ -326,40 +326,46 @@ export async function getPaymentHistory(organizationId: string, limit = 50) {
 }
 
 export async function getPaymentStats(organizationId: string) {
-  const allPayments = await db.query.payments.findMany({
-    where: eq(payments.organizationId, organizationId),
-  });
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const todayPayments = allPayments.filter((p) => new Date(p.createdAt) >= today);
+  const [stats] = await db
+    .select({
+      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN status = 'completed' THEN amount::numeric ELSE 0 END), 0)`,
+      pendingAmount: sql<number>`COALESCE(SUM(CASE WHEN status = 'pending' THEN amount::numeric ELSE 0 END), 0)`,
+      failedAmount: sql<number>`COALESCE(SUM(CASE WHEN status = 'failed' THEN amount::numeric ELSE 0 END), 0)`,
+      todayCount: sql<number>`COUNT(CASE WHEN created_at >= ${today} THEN 1 END)`,
+      completedCount: sql<number>`COUNT(CASE WHEN status = 'completed' THEN 1 END)`,
+      pendingCount: sql<number>`COUNT(CASE WHEN status = 'pending' THEN 1 END)`,
+      failedCount: sql<number>`COUNT(CASE WHEN status = 'failed' THEN 1 END)`,
+    })
+    .from(payments)
+    .where(eq(payments.organizationId, organizationId));
 
-  const completed = todayPayments.filter((p) => p.status === "completed");
-  const pending = todayPayments.filter((p) => p.status === "pending");
-  const failed = todayPayments.filter((p) => p.status === "failed");
+  const byMethod = await db
+    .select({
+      method: payments.method,
+      count: sql<number>`COUNT(*)`,
+      amount: sql<number>`COALESCE(SUM(amount::numeric), 0)`,
+    })
+    .from(payments)
+    .where(and(eq(payments.organizationId, organizationId), eq(payments.status, "completed")))
+    .groupBy(payments.method);
 
-  const totalRevenue = completed.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-  const pendingAmount = pending.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-  const failedAmount = failed.reduce((sum, p) => sum + parseFloat(p.amount), 0);
-
-  const byMethod = completed.reduce<Record<string, { count: number; amount: number }>>((acc, p) => {
-    const key = p.method;
-    if (!acc[key]) acc[key] = { count: 0, amount: 0 };
-    acc[key].count += 1;
-    acc[key].amount += parseFloat(p.amount);
+  const byMethodMap = byMethod.reduce<Record<string, { count: number; amount: number }>>((acc, row) => {
+    acc[row.method] = { count: Number(row.count), amount: Number(row.amount) };
     return acc;
   }, {});
 
   return {
-    totalRevenue,
-    pendingAmount,
-    failedAmount,
-    todayCount: todayPayments.length,
-    completedCount: completed.length,
-    pendingCount: pending.length,
-    failedCount: failed.length,
-    byMethod,
+    totalRevenue: Number(stats.totalRevenue),
+    pendingAmount: Number(stats.pendingAmount),
+    failedAmount: Number(stats.failedAmount),
+    todayCount: Number(stats.todayCount),
+    completedCount: Number(stats.completedCount),
+    pendingCount: Number(stats.pendingCount),
+    failedCount: Number(stats.failedCount),
+    byMethod: byMethodMap,
   };
 }
 
@@ -391,15 +397,21 @@ async function settleInvoice(invoiceId: string, organizationId: string, amount: 
 
   if (!invoice) return;
 
-  const newPaid = parseFloat(invoice.amountPaid || "0") + amount;
+  let newPaid = parseFloat(invoice.amountPaid || "0") + amount;
   const total = parseFloat(invoice.total);
+
+  if (newPaid > total) {
+    newPaid = total;
+  }
+
+  const newStatus = newPaid >= total ? "paid" : "partial";
 
   await db
     .update(invoices)
     .set({
       amountPaid: newPaid.toFixed(2),
-      status: newPaid >= total ? "paid" : "partial",
-      paidAt: newPaid >= total ? new Date() : null,
+      status: newStatus,
+      paidAt: newStatus === "paid" ? new Date() : null,
       updatedAt: new Date(),
     })
     .where(eq(invoices.id, invoiceId));

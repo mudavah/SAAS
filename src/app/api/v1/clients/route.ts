@@ -4,10 +4,10 @@ import { clients } from "@/db/schema";
 import { clientSchema } from "@/lib/validations";
 import { eq, desc } from "drizzle-orm";
 import { handleApi, type ServerContext } from "@/lib/session";
-import { API_CORS_HEADERS, corsResponse } from "@/lib/api/cors";
+import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
 
-export async function OPTIONS() {
-  return corsResponse(null, 204);
+export async function OPTIONS(req: Request) {
+  return corsResponse(null, 204, req);
 }
 
 export async function GET(req: Request) {
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
       orderBy: (clients, { desc }) => [desc(clients.createdAt)],
       limit: 100,
     });
-    return NextResponse.json({ clients: rows }, { headers: API_CORS_HEADERS });
+    return NextResponse.json({ clients: rows }, { headers: getCorsHeaders(req) });
   });
 }
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       if (!parsed.success) {
         return NextResponse.json(
           { error: parsed.error.errors[0].message },
-          { status: 400, headers: API_CORS_HEADERS }
+          { status: 400, headers: getCorsHeaders(req) }
         );
       }
 
@@ -45,13 +45,13 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         { client },
-        { status: 201, headers: API_CORS_HEADERS }
+        { status: 201, headers: getCorsHeaders(req) }
       );
     } catch (error) {
       console.error("API create client error:", error);
       return NextResponse.json(
         { error: "Internal server error" },
-        { status: 500, headers: API_CORS_HEADERS }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
   });

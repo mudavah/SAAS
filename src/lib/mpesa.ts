@@ -22,14 +22,7 @@ const MPESA_BASE_URL =
 
 let cachedToken: { token: string; expires: number } | null = null;
 
-function isPlaceholder(value?: string): boolean {
-  if (!value) return true;
-  return (
-    value.includes("your-domain") ||
-    value.includes("...") ||
-    value.trim() === ""
-  );
-}
+import { isPlaceholder } from "@/lib/validation-helpers";
 
 export function isMpesaConfigured(): boolean {
   return (
