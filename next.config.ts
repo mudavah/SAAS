@@ -25,11 +25,12 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self'",
+              // Next.js relies on inline scripts (RSC/bootstrap) and dev HMR uses eval.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' lh3.googleusercontent.com avatars.githubusercontent.com",
-              "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com",
-              "connect-src 'self'",
+              "img-src 'self' data: blob: lh3.googleusercontent.com avatars.githubusercontent.com",
+              "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com",
+              "connect-src 'self' ws: wss:",
               "frame-ancestors 'none'",
             ].join("; "),
           },
