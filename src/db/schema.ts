@@ -106,8 +106,344 @@ export const etimsStatusEnum = pgEnum("etims_status", [
   "cancelled",
 ]);
 
+// Compliance Center enums
+export const complianceHealthScoreEnum = pgEnum("compliance_health_score", [
+  "excellent",
+  "good",
+  "fair",
+  "poor",
+]);
+export const complianceAlertSeverityEnum = pgEnum("compliance_alert_severity", [
+  "info",
+  "warning",
+  "critical",
+]);
+export const taxReportTypeEnum = pgEnum("tax_report_type", [
+  "monthly",
+  "quarterly",
+  "annual",
+]);
+
+// AI Copilot enums
+export const aiConversationStatusEnum = pgEnum("ai_conversation_status", [
+  "active",
+  "archived",
+]);
+
+// Business Timeline enums
+export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
+  "invoice.created",
+  "invoice.updated",
+  "invoice.deleted",
+  "invoice.sent",
+  "invoice.paid",
+  "payment.received",
+  "payment.failed",
+  "payment.refunded",
+  "client.created",
+  "client.updated",
+  "expense.created",
+  "expense.updated",
+  "inventory.stock_adjusted",
+  "inventory.product_created",
+  "journal.posted",
+  "journal.reversed",
+  "subscription.created",
+  "subscription.updated",
+  "subscription.cancelled",
+  "notification.created",
+  "audit.logged",
+  "compliance.submitted",
+  "compliance.validated",
+  "compliance.failed",
+  "ai.insight_generated",
+  "team.member_invited",
+  "team.member_joined",
+  "team.member_removed",
+  "onboarding.step_completed",
+]);
+
+// Onboarding enums
+export const onboardingStepStatusEnum = pgEnum("onboarding_step_status", [
+  "pending",
+  "completed",
+  "skipped",
+]);
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Enterprise Foundation enums
+// Compliance Center tables
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const complianceAlerts = pgTable("compliance_alerts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  severity: complianceAlertSeverityEnum("severity").notNull(),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  actionUrl: text("action_url"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  read: boolean("read").default(false).notNull(),
+  resolved: boolean("resolved").default(false).notNull(),
+  resolvedAt: timestamp("resolved_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("compliance_alerts_org_idx").on(table.organizationId),
+  userIdx: index("compliance_alerts_user_idx").on(table.userId),
+}));
+
+export const taxReports = pgTable("tax_reports", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  type: taxReportTypeEnum("type").notNull(),
+  periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+  periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+  totalSales: decimal("total_sales", { precision: 12, scale: 2 }).default("0"),
+  totalTax: decimal("total_tax", { precision: 12, scale: 2 }).default("0"),
+  invoiceCount: integer("invoice_count").default(0),
+  status: text("status").default("draft").notNull(),
+  fileUrl: text("file_url"),
+  submittedAt: timestamp("submitted_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("tax_reports_org_idx").on(table.organizationId),
+  userIdx: index("tax_reports_user_idx").on(table.userId),
+}));
+
+export const taxCalendar = pgTable("tax_calendar", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date", { mode: "date" }).notNull(),
+  type: text("type").notNull(),
+  recurring: boolean("recurring").default(false).notNull(),
+  completed: boolean("completed").default(false).notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("tax_calendar_org_idx").on(table.organizationId),
+}));
+
+export const complianceSettings = pgTable("compliance_settings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" })
+    .unique(),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  autoSubmit: boolean("auto_submit").default(false).notNull(),
+  notifyBeforeDeadline: boolean("notify_before_deadline").default(true).notNull(),
+  notifyOnFailure: boolean("notify_on_failure").default(true).notNull(),
+  retryFailedSubmissions: boolean("retry_failed_submissions").default(true).notNull(),
+  maxRetries: integer("max_retries").default(3),
+  retryDelayMinutes: integer("retry_delay_minutes").default(30),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Business Copilot tables
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const aiConversations = pgTable("ai_conversations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title"),
+  status: aiConversationStatusEnum("status").default("active").notNull(),
+  context: jsonb("context").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_conversations_org_idx").on(table.organizationId),
+  userIdx: index("ai_conversations_user_idx").on(table.userId),
+}));
+
+export const aiMessages = pgTable("ai_messages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => aiConversations.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  tokensUsed: integer("tokens_used"),
+  model: text("model"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  conversationIdx: index("ai_messages_conversation_idx").on(table.conversationId),
+  orgIdx: index("ai_messages_org_idx").on(table.organizationId),
+}));
+
+export const aiInsights = pgTable("ai_insights", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  priority: text("priority").default("normal").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}),
+  read: boolean("read").default(false).notNull(),
+  dismissed: boolean("dismissed").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_insights_org_idx").on(table.organizationId),
+  userIdx: index("ai_insights_user_idx").on(table.userId),
+}));
+
+export const aiBusinessHealth = pgTable("ai_business_health", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  score: integer("score").notNull(),
+  cashFlowScore: integer("cash_flow_score"),
+  revenueScore: integer("revenue_score"),
+  expenseScore: integer("expense_score"),
+  clientScore: integer("client_score"),
+  inventoryScore: integer("inventory_score"),
+  complianceScore: integer("compliance_score"),
+  insights: jsonb("insights").$type<Record<string, unknown>>().default({}),
+  calculatedAt: timestamp("calculated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_business_health_org_idx").on(table.organizationId),
+  userIdx: index("ai_business_health_user_idx").on(table.userId),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Business Timeline table
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const businessTimeline = pgTable("business_timeline", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  eventType: timelineEventTypeEnum("event_type").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  resourceType: text("resource_type"),
+  resourceId: text("resource_id"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("business_timeline_org_idx").on(table.organizationId),
+  userIdx: index("business_timeline_user_idx").on(table.userId),
+  eventTypeIdx: index("business_timeline_event_type_idx").on(table.eventType),
+  createdIdx: index("business_timeline_created_idx").on(table.createdAt),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Guided Onboarding tables
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const onboardingSteps = pgTable("onboarding_steps", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  key: text("key").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  route: text("route").notNull(),
+  order: integer("order").notNull(),
+  required: boolean("required").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const onboardingProgress = pgTable("onboarding_progress", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  stepId: text("step_id")
+    .notNull()
+    .references(() => onboardingSteps.id, { onDelete: "cascade" }),
+  status: onboardingStepStatusEnum("status").default("pending").notNull(),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  userStepIdx: uniqueIndex("unique_user_step").on(table.userId, table.stepId),
+  orgIdx: index("onboarding_progress_org_idx").on(table.organizationId),
+}));
+
+export const onboardingTips = pgTable("onboarding_tips", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  stepId: text("step_id").references(() => onboardingSteps.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  position: text("position").default("bottom").notNull(),
+  order: integer("order").default(0).notNull(),
+}, (table) => ({
+  stepIdx: index("onboarding_tips_step_idx").on(table.stepId),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Relations
 // ─────────────────────────────────────────────────────────────────────────────
 
 // RBAC system roles
@@ -1629,6 +1965,137 @@ export const paymentTransactionsRelations = relations(paymentTransactions, ({ on
   }),
 }));
 
+// Compliance Center relations
+export const complianceAlertsRelations = relations(complianceAlerts, ({ one }) => ({
+  user: one(users, {
+    fields: [complianceAlerts.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [complianceAlerts.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const taxReportsRelations = relations(taxReports, ({ one }) => ({
+  user: one(users, {
+    fields: [taxReports.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [taxReports.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const taxCalendarRelations = relations(taxCalendar, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [taxCalendar.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const complianceSettingsRelations = relations(complianceSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [complianceSettings.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [complianceSettings.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+// AI Copilot relations
+export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
+  user: one(users, {
+    fields: [aiConversations.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [aiConversations.organizationId],
+    references: [organizations.id],
+  }),
+  messages: many(aiMessages),
+}));
+
+export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
+  conversation: one(aiConversations, {
+    fields: [aiMessages.conversationId],
+    references: [aiConversations.id],
+  }),
+  user: one(users, {
+    fields: [aiMessages.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [aiMessages.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const aiInsightsRelations = relations(aiInsights, ({ one }) => ({
+  user: one(users, {
+    fields: [aiInsights.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [aiInsights.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const aiBusinessHealthRelations = relations(aiBusinessHealth, ({ one }) => ({
+  user: one(users, {
+    fields: [aiBusinessHealth.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [aiBusinessHealth.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+// Business Timeline relations
+export const businessTimelineRelations = relations(businessTimeline, ({ one }) => ({
+  user: one(users, {
+    fields: [businessTimeline.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [businessTimeline.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+// Onboarding relations
+export const onboardingStepsRelations = relations(onboardingSteps, ({ many }) => ({
+  progress: many(onboardingProgress),
+  tips: many(onboardingTips),
+}));
+
+export const onboardingProgressRelations = relations(onboardingProgress, ({ one }) => ({
+  user: one(users, {
+    fields: [onboardingProgress.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [onboardingProgress.organizationId],
+    references: [organizations.id],
+  }),
+  step: one(onboardingSteps, {
+    fields: [onboardingProgress.stepId],
+    references: [onboardingSteps.id],
+  }),
+}));
+
+export const onboardingTipsRelations = relations(onboardingTips, ({ one }) => ({
+  step: one(onboardingSteps, {
+    fields: [onboardingTips.stepId],
+    references: [onboardingSteps.id],
+  }),
+}));
+
 // Types
 export type User = typeof users.$inferSelect;
 export type Business = typeof businesses.$inferSelect;
@@ -1675,6 +2142,26 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
 export type PaymentWebhookLog = typeof paymentWebhookLogs.$inferSelect;
 
+// Compliance Center types
+export type ComplianceAlert = typeof complianceAlerts.$inferSelect;
+export type TaxReport = typeof taxReports.$inferSelect;
+export type TaxCalendar = typeof taxCalendar.$inferSelect;
+export type ComplianceSettings = typeof complianceSettings.$inferSelect;
+
+// AI Copilot types
+export type AiConversation = typeof aiConversations.$inferSelect;
+export type AiMessage = typeof aiMessages.$inferSelect;
+export type AiInsight = typeof aiInsights.$inferSelect;
+export type AiBusinessHealth = typeof aiBusinessHealth.$inferSelect;
+
+// Business Timeline types
+export type BusinessTimeline = typeof businessTimeline.$inferSelect;
+
+// Onboarding types
+export type OnboardingStep = typeof onboardingSteps.$inferSelect;
+export type OnboardingProgress = typeof onboardingProgress.$inferSelect;
+export type OnboardingTip = typeof onboardingTips.$inferSelect;
+
 // Enterprise foundation enums (TypeScript unions)
 export type RoleType = (typeof roleTypeEnum.enumValues)[number];
 export type MemberStatus = (typeof memberStatusEnum.enumValues)[number];
@@ -1688,3 +2175,13 @@ export type NotificationPriority =
 export type ApiKeyStatus = (typeof apiKeyStatusEnum.enumValues)[number];
 export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
 export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
+export type ComplianceHealthScore =
+  (typeof complianceHealthScoreEnum.enumValues)[number];
+export type ComplianceAlertSeverity =
+  (typeof complianceAlertSeverityEnum.enumValues)[number];
+export type TaxReportType = (typeof taxReportTypeEnum.enumValues)[number];
+export type AiConversationStatus =
+  (typeof aiConversationStatusEnum.enumValues)[number];
+export type TimelineEventType = (typeof timelineEventTypeEnum.enumValues)[number];
+export type OnboardingStepStatus =
+  (typeof onboardingStepStatusEnum.enumValues)[number];

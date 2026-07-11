@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { paymentLinks } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
+import { auth } from "@/lib/auth";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,7 +12,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       eq(paymentLinks.slug, id),
       eq(paymentLinks.isActive, true)
     ),
-    with: { invoice: true, client: true },
+    with: { invoice: { with: { client: true } }, client: true },
   });
 
   if (!link) {
@@ -26,6 +27,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: "Payment link has reached maximum uses" }, { status: 410 });
   }
 
+  const session = await auth();
+  const isOwner = session?.user?.id && link.userId === session.user.id;
+
   const publicLink = {
     type: link.type,
     amount: link.amount,
@@ -38,6 +42,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     isActive: link.isActive,
     slug: link.slug,
     createdAt: link.createdAt,
+    ...(isOwner ? {
+      invoiceId: link.invoiceId,
+      clientId: link.clientId,
+      organizationId: link.organizationId,
+      userId: link.userId,
+      metadata: link.metadata,
+    } : {}),
   };
 
   return NextResponse.json(publicLink);
