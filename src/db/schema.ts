@@ -83,6 +83,88 @@ export const purchaseOrderStatusEnum = pgEnum("purchase_order_status", [
   "cancelled",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Procurement enums (Epic 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const procurementRequestStatusEnum = pgEnum("procurement_request_status", [
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "ordered",
+  "cancelled",
+]);
+
+export const rfqStatusEnum = pgEnum("rfq_status", [
+  "draft",
+  "sent",
+  "closed",
+  "cancelled",
+]);
+
+export const supplierQuotationStatusEnum = pgEnum("supplier_quotation_status", [
+  "received",
+  "accepted",
+  "rejected",
+  "expired",
+]);
+
+export const procurementPOStatusEnum = pgEnum("procurement_po_status", [
+  "draft",
+  "submitted",
+  "approved",
+  "rejected",
+  "ordered",
+  "partially_received",
+  "received",
+  "cancelled",
+]);
+
+export const grnStatusEnum = pgEnum("grn_status", [
+  "draft",
+  "completed",
+]);
+
+export const supplierReturnStatusEnum = pgEnum("supplier_return_status", [
+  "draft",
+  "completed",
+  "cancelled",
+]);
+
+export const purchaseInvoiceStatusEnum = pgEnum("purchase_invoice_status", [
+  "received",
+  "partially_paid",
+  "paid",
+  "cancelled",
+]);
+
+export const supplierPaymentStatusEnum = pgEnum("supplier_payment_status", [
+  "pending",
+  "completed",
+  "failed",
+  "refunded",
+]);
+
+export const budgetPeriodEnum = pgEnum("budget_period", [
+  "monthly",
+  "quarterly",
+  "annual",
+]);
+
+export const approvalLevelStatusEnum = pgEnum("approval_level_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "skipped",
+]);
+
+export const recommendationStatusEnum = pgEnum("recommendation_status", [
+  "open",
+  "dismissed",
+  "applied",
+]);
+
 // Bookkeeping enums
 export const accountTypeEnum = pgEnum("account_type", [
   "asset",
@@ -241,6 +323,25 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "crm.quotation.created",
   "crm.quotation.converted",
   "crm.activity.completed",
+  "procurement.request.created",
+  "procurement.request.approved",
+  "procurement.request.rejected",
+  "procurement.rfq.created",
+  "procurement.rfq.sent",
+  "procurement.quotation.received",
+  "procurement.quotation.accepted",
+  "procurement.po.created",
+  "procurement.po.submitted",
+  "procurement.po.approved",
+  "procurement.po.rejected",
+  "procurement.po.ordered",
+  "procurement.po.received",
+  "procurement.grn.received",
+  "procurement.return.created",
+  "procurement.invoice.received",
+  "procurement.payment.made",
+  "procurement.budget.exceeded",
+  "procurement.recommendation.created",
 ]);
 
 // Onboarding enums
@@ -1437,13 +1538,31 @@ export const inventorySuppliers = pgTable("inventory_suppliers", {
     onDelete: "cascade",
   }),
   name: text("name").notNull(),
+  contactName: text("contact_name"),
   email: text("email"),
   phone: text("phone"),
+  website: text("website"),
   address: text("address"),
+  city: text("city"),
+  country: text("country").default("Kenya"),
+  taxId: text("tax_id"),
+  category: text("category"),
   notes: text("notes"),
+  // Commercial terms
+  paymentTerms: text("payment_terms"),
+  leadTimeDays: integer("lead_time_days"),
+  preferredCurrency: text("preferred_currency").default("KES"),
+  // Banking for payments
+  bankName: text("bank_name"),
+  bankAccount: text("bank_account"),
+  // Performance / quality
+  rating: integer("rating"),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  orgIdx: index("inventory_suppliers_org_idx").on(table.organizationId),
+}));
 
 export const inventoryWarehouses = pgTable("inventory_warehouses", {
   id: text("id")
@@ -1804,8 +1923,16 @@ export const inventoryBrandsRelations = relations(inventoryBrands, ({ one, many 
   products: many(inventoryProducts),
 }));
 
-export const inventorySuppliersRelations = relations(inventorySuppliers, ({ one }) => ({
+export const inventorySuppliersRelations = relations(inventorySuppliers, ({ one, many }) => ({
   user: one(users, { fields: [inventorySuppliers.userId], references: [users.id] }),
+  rfqSuppliers: many(procurementRfqSuppliers),
+  quotations: many(procurementSupplierQuotations),
+  purchaseOrders: many(procurementPurchaseOrders),
+  grns: many(procurementGrns),
+  returns: many(procurementSupplierReturns),
+  invoices: many(procurementPurchaseInvoices),
+  payments: many(procurementSupplierPayments),
+  recommendations: many(procurementAiRecommendations),
 }));
 
 export const inventoryWarehousesRelations = relations(inventoryWarehouses, ({ one, many }) => ({
@@ -2775,3 +2902,1081 @@ export type AiConversationStatus =
   (typeof aiConversationStatusEnum.enumValues)[number];
 export type OnboardingStepStatus =
   (typeof onboardingStepStatusEnum.enumValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE — PROCUREMENT (Epic 3)
+// ─────────────────────────────────────────────────────────────────────────────
+// Every procurement table is multi-tenant: it carries `organizationId` and
+// user-scoped ownership. Cross-references to products/suppliers/POs are scoped
+// so a tenant can never read or mutate another tenant's procurement data. All
+// mutations are gated by RBAC, audited, emit Business Timeline events, and
+// integrate with Inventory (stock movements), Bookkeeping (journal entries) and
+// the AI Business Copilot (recommendations).
+
+// Purchase Requests
+export const procurementPurchaseRequests = pgTable(
+  "procurement_purchase_requests",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    requestNumber: text("request_number").notNull(),
+    title: text("title").notNull(),
+    department: text("department"),
+    requesterId: text("requester_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    status: procurementRequestStatusEnum("status").default("draft").notNull(),
+    priority: text("priority").default("medium").notNull(),
+    notes: text("notes"),
+    requestedDate: timestamp("requested_date", { mode: "date" }).notNull(),
+    neededBy: timestamp("needed_by", { mode: "date" }),
+    currency: text("currency").default("KES").notNull(),
+    totalEstimated: decimal("total_estimated", { precision: 14, scale: 2 }).default("0"),
+    approvedBy: text("approved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { mode: "date" }),
+    rejectionReason: text("rejection_reason"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("ppr_org_idx").on(table.organizationId),
+    userIdx: index("ppr_user_idx").on(table.userId),
+    numberIdx: uniqueIndex("unique_org_ppr_number").on(
+      table.organizationId,
+      table.requestNumber
+    ),
+    statusIdx: index("ppr_status_idx").on(table.status),
+  })
+);
+
+export const procurementPurchaseRequestItems = pgTable(
+  "procurement_purchase_request_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    requestId: text("request_id")
+      .notNull()
+      .references(() => procurementPurchaseRequests.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    description: text("description").notNull(),
+    quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+    unit: text("unit").default("pcs"),
+    estUnitCost: decimal("est_unit_cost", { precision: 12, scale: 2 }).default("0"),
+    lineTotal: decimal("line_total", { precision: 14, scale: 2 }).default("0"),
+  },
+  (table) => ({
+    orgIdx: index("ppri_org_idx").on(table.organizationId),
+    requestIdx: index("ppri_request_idx").on(table.requestId),
+  })
+);
+
+// Request for Quotations (RFQs)
+export const procurementRfqs = pgTable(
+  "procurement_rfqs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    rfqNumber: text("rfq_number").notNull(),
+    title: text("title").notNull(),
+    status: rfqStatusEnum("status").default("draft").notNull(),
+    issuedDate: timestamp("issued_date", { mode: "date" }),
+    validUntil: timestamp("valid_until", { mode: "date" }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("prfq_org_idx").on(table.organizationId),
+    userIdx: index("prfq_user_idx").on(table.userId),
+    numberIdx: uniqueIndex("unique_org_rfq_number").on(
+      table.organizationId,
+      table.rfqNumber
+    ),
+    statusIdx: index("prfq_status_idx").on(table.status),
+  })
+);
+
+export const procurementRfqItems = pgTable(
+  "procurement_rfq_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    rfqId: text("rfq_id")
+      .notNull()
+      .references(() => procurementRfqs.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    description: text("description").notNull(),
+    quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+    unit: text("unit").default("pcs"),
+  },
+  (table) => ({
+    orgIdx: index("prfqi_org_idx").on(table.organizationId),
+    rfqIdx: index("prfqi_rfq_idx").on(table.rfqId),
+  })
+);
+
+export const procurementRfqSuppliers = pgTable(
+  "procurement_rfq_suppliers",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    rfqId: text("rfq_id")
+      .notNull()
+      .references(() => procurementRfqs.id, { onDelete: "cascade" }),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => inventorySuppliers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("prfqs_org_idx").on(table.organizationId),
+    rfqIdx: index("prfqs_rfq_idx").on(table.rfqId),
+    supplierIdx: index("prfqs_supplier_idx").on(table.supplierId),
+    uniqueRfqSupplier: uniqueIndex("unique_rfq_supplier").on(
+      table.rfqId,
+      table.supplierId
+    ),
+  })
+);
+
+// Supplier Quotations
+export const procurementSupplierQuotations = pgTable(
+  "procurement_supplier_quotations",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    rfqId: text("rfq_id").references(() => procurementRfqs.id, {
+      onDelete: "set null",
+    }),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => inventorySuppliers.id, { onDelete: "cascade" }),
+    quotationNumber: text("quotation_number").notNull(),
+    status: supplierQuotationStatusEnum("status").default("received").notNull(),
+    receivedDate: timestamp("received_date", { mode: "date" }).notNull(),
+    validUntil: timestamp("valid_until", { mode: "date" }),
+    currency: text("currency").default("KES").notNull(),
+    subtotal: decimal("subtotal", { precision: 14, scale: 2 }).default("0"),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+    taxAmount: decimal("tax_amount", { precision: 14, scale: 2 }).default("0"),
+    total: decimal("total", { precision: 14, scale: 2 }).default("0"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("psq_org_idx").on(table.organizationId),
+    userIdx: index("psq_user_idx").on(table.userId),
+    rfqIdx: index("psq_rfq_idx").on(table.rfqId),
+    supplierIdx: index("psq_supplier_idx").on(table.supplierId),
+    numberIdx: uniqueIndex("unique_org_psq_number").on(
+      table.organizationId,
+      table.quotationNumber
+    ),
+    statusIdx: index("psq_status_idx").on(table.status),
+  })
+);
+
+export const procurementSupplierQuotationItems = pgTable(
+  "procurement_supplier_quotation_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    quotationId: text("quotation_id")
+      .notNull()
+      .references(() => procurementSupplierQuotations.id, { onDelete: "cascade" }),
+    rfqItemId: text("rfq_item_id").references(() => procurementRfqItems.id, {
+      onDelete: "set null",
+    }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    description: text("description").notNull(),
+    quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+    unit: text("unit").default("pcs"),
+    unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+    lineTotal: decimal("line_total", { precision: 14, scale: 2 }).default("0"),
+  },
+  (table) => ({
+    orgIdx: index("psqi_org_idx").on(table.organizationId),
+    quotationIdx: index("psqi_quotation_idx").on(table.quotationId),
+  })
+);
+
+// Purchase Orders (full procurement POs; integrated with inventory)
+export const procurementPurchaseOrders = pgTable(
+  "procurement_purchase_orders",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    poNumber: text("po_number").notNull(),
+    requestId: text("request_id").references(() => procurementPurchaseRequests.id, {
+      onDelete: "set null",
+    }),
+    rfqId: text("rfq_id").references(() => procurementRfqs.id, {
+      onDelete: "set null",
+    }),
+    supplierId: text("supplier_id").references(() => inventorySuppliers.id, {
+      onDelete: "set null",
+    }),
+    status: procurementPOStatusEnum("status").default("draft").notNull(),
+    orderDate: timestamp("order_date", { mode: "date" }).notNull(),
+    expectedDate: timestamp("expected_date", { mode: "date" }),
+    currency: text("currency").default("KES").notNull(),
+    subtotal: decimal("subtotal", { precision: 14, scale: 2 }).default("0"),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+    taxAmount: decimal("tax_amount", { precision: 14, scale: 2 }).default("0"),
+    total: decimal("total", { precision: 14, scale: 2 }).default("0"),
+    notes: text("notes"),
+    // Approval workflow
+    approvalStatus: approvalLevelStatusEnum("approval_status").default("pending").notNull(),
+    currentApprovalLevel: integer("current_approval_level").default(0),
+    approvedBy: text("approved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { mode: "date" }),
+    rejectionReason: text("rejection_reason"),
+    budgetId: text("budget_id").references(() => procurementBudgets.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("ppo_org_idx").on(table.organizationId),
+    userIdx: index("ppo_user_idx").on(table.userId),
+    supplierIdx: index("ppo_supplier_idx").on(table.supplierId),
+    requestIdx: index("ppo_request_idx").on(table.requestId),
+    numberIdx: uniqueIndex("unique_org_ppo_number").on(
+      table.organizationId,
+      table.poNumber
+    ),
+    statusIdx: index("ppo_status_idx").on(table.status),
+  })
+);
+
+export const procurementPurchaseOrderItems = pgTable(
+  "procurement_purchase_order_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    purchaseOrderId: text("purchase_order_id")
+      .notNull()
+      .references(() => procurementPurchaseOrders.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    description: text("description").notNull(),
+    quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+    unit: text("unit").default("pcs"),
+    unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+    taxAmount: decimal("tax_amount", { precision: 14, scale: 2 }).default("0"),
+    lineTotal: decimal("line_total", { precision: 14, scale: 2 }).default("0"),
+    receivedQuantity: decimal("received_quantity", { precision: 12, scale: 2 }).default("0"),
+    warehouseId: text("warehouse_id").references(() => inventoryWarehouses.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => ({
+    orgIdx: index("ppoi_org_idx").on(table.organizationId),
+    poIdx: index("ppoi_po_idx").on(table.purchaseOrderId),
+    productIdx: index("ppoi_product_idx").on(table.productId),
+  })
+);
+
+// Multi-level approval workflow (generic, used by purchase requests and POs)
+export const procurementApprovals = pgTable(
+  "procurement_approvals",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    resourceType: text("resource_type").notNull(), // purchase_request | purchase_order
+    resourceId: text("resource_id").notNull(),
+    level: integer("level").notNull(),
+    requiredRoleType: roleTypeEnum("required_role_type").notNull(),
+    status: approvalLevelStatusEnum("status").default("pending").notNull(),
+    approverId: text("approver_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: timestamp("decided_at", { mode: "date" }),
+    comments: text("comments"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("pa_org_idx").on(table.organizationId),
+    resourceIdx: index("pa_resource_idx").on(table.resourceType, table.resourceId),
+    statusIdx: index("pa_status_idx").on(table.status),
+  })
+);
+
+// Goods Received Notes (GRN)
+export const procurementGrns = pgTable(
+  "procurement_grns",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    grnNumber: text("grn_number").notNull(),
+    purchaseOrderId: text("purchase_order_id")
+      .notNull()
+      .references(() => procurementPurchaseOrders.id, { onDelete: "cascade" }),
+    supplierId: text("supplier_id").references(() => inventorySuppliers.id, {
+      onDelete: "set null",
+    }),
+    receivedDate: timestamp("received_date", { mode: "date" }).notNull(),
+    status: grnStatusEnum("status").default("draft").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("pgrn_org_idx").on(table.organizationId),
+    userIdx: index("pgrn_user_idx").on(table.userId),
+    poIdx: index("pgrn_po_idx").on(table.purchaseOrderId),
+    numberIdx: uniqueIndex("unique_org_grn_number").on(
+      table.organizationId,
+      table.grnNumber
+    ),
+    statusIdx: index("pgrn_status_idx").on(table.status),
+  })
+);
+
+export const procurementGrnItems = pgTable(
+  "procurement_grn_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    grnId: text("grn_id")
+      .notNull()
+      .references(() => procurementGrns.id, { onDelete: "cascade" }),
+    poItemId: text("po_item_id")
+      .notNull()
+      .references(() => procurementPurchaseOrderItems.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => inventoryWarehouses.id, { onDelete: "cascade" }),
+    quantityReceived: decimal("quantity_received", { precision: 12, scale: 2 }).notNull(),
+    quantityDamaged: decimal("quantity_damaged", { precision: 12, scale: 2 }).default("0"),
+    unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).default("0"),
+  },
+  (table) => ({
+    orgIdx: index("pgrni_org_idx").on(table.organizationId),
+    grnIdx: index("pgrni_grn_idx").on(table.grnId),
+    poItemIdx: index("pgrni_po_item_idx").on(table.poItemId),
+  })
+);
+
+// Supplier Returns
+export const procurementSupplierReturns = pgTable(
+  "procurement_supplier_returns",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    returnNumber: text("return_number").notNull(),
+    grnId: text("grn_id").references(() => procurementGrns.id, {
+      onDelete: "set null",
+    }),
+    purchaseOrderId: text("purchase_order_id").references(() => procurementPurchaseOrders.id, {
+      onDelete: "set null",
+    }),
+    supplierId: text("supplier_id").references(() => inventorySuppliers.id, {
+      onDelete: "set null",
+    }),
+    returnDate: timestamp("return_date", { mode: "date" }).notNull(),
+    status: supplierReturnStatusEnum("status").default("draft").notNull(),
+    reason: text("reason"),
+    total: decimal("total", { precision: 14, scale: 2 }).default("0"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("psr_org_idx").on(table.organizationId),
+    userIdx: index("psr_user_idx").on(table.userId),
+    grnIdx: index("psr_grn_idx").on(table.grnId),
+    supplierIdx: index("psr_supplier_idx").on(table.supplierId),
+    numberIdx: uniqueIndex("unique_org_sr_number").on(
+      table.organizationId,
+      table.returnNumber
+    ),
+    statusIdx: index("psr_status_idx").on(table.status),
+  })
+);
+
+export const procurementSupplierReturnItems = pgTable(
+  "procurement_supplier_return_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    returnId: text("return_id")
+      .notNull()
+      .references(() => procurementSupplierReturns.id, { onDelete: "cascade" }),
+    grnItemId: text("grn_item_id").references(() => procurementGrnItems.id, {
+      onDelete: "set null",
+    }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    warehouseId: text("warehouse_id").references(() => inventoryWarehouses.id, {
+      onDelete: "set null",
+    }),
+    quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+    unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).default("0"),
+    lineTotal: decimal("line_total", { precision: 14, scale: 2 }).default("0"),
+  },
+  (table) => ({
+    orgIdx: index("psri_org_idx").on(table.organizationId),
+    returnIdx: index("psri_return_idx").on(table.returnId),
+  })
+);
+
+// Purchase Invoices (from suppliers)
+export const procurementPurchaseInvoices = pgTable(
+  "procurement_purchase_invoices",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    invoiceNumber: text("invoice_number").notNull(),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => inventorySuppliers.id, { onDelete: "cascade" }),
+    purchaseOrderId: text("purchase_order_id").references(() => procurementPurchaseOrders.id, {
+      onDelete: "set null",
+    }),
+    grnId: text("grn_id").references(() => procurementGrns.id, {
+      onDelete: "set null",
+    }),
+    issueDate: timestamp("issue_date", { mode: "date" }).notNull(),
+    dueDate: timestamp("due_date", { mode: "date" }).notNull(),
+    currency: text("currency").default("KES").notNull(),
+    subtotal: decimal("subtotal", { precision: 14, scale: 2 }).default("0"),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+    taxAmount: decimal("tax_amount", { precision: 14, scale: 2 }).default("0"),
+    total: decimal("total", { precision: 14, scale: 2 }).default("0"),
+    amountPaid: decimal("amount_paid", { precision: 14, scale: 2 }).default("0"),
+    status: purchaseInvoiceStatusEnum("status").default("received").notNull(),
+    journalEntryId: text("journal_entry_id").references(() => journalEntries.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("ppi_org_idx").on(table.organizationId),
+    userIdx: index("ppi_user_idx").on(table.userId),
+    supplierIdx: index("ppi_supplier_idx").on(table.supplierId),
+    poIdx: index("ppi_po_idx").on(table.purchaseOrderId),
+    numberIdx: uniqueIndex("unique_org_ppi_number").on(
+      table.organizationId,
+      table.invoiceNumber
+    ),
+    statusIdx: index("ppi_status_idx").on(table.status),
+  })
+);
+
+export const procurementPurchaseInvoiceItems = pgTable(
+  "procurement_purchase_invoice_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    purchaseInvoiceId: text("purchase_invoice_id")
+      .notNull()
+      .references(() => procurementPurchaseInvoices.id, { onDelete: "cascade" }),
+    poItemId: text("po_item_id").references(() => procurementPurchaseOrderItems.id, {
+      onDelete: "set null",
+    }),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    description: text("description").notNull(),
+    quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+    unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
+    taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+    taxAmount: decimal("tax_amount", { precision: 14, scale: 2 }).default("0"),
+    lineTotal: decimal("line_total", { precision: 14, scale: 2 }).default("0"),
+  },
+  (table) => ({
+    orgIdx: index("ppii_org_idx").on(table.organizationId),
+    invoiceIdx: index("ppii_invoice_idx").on(table.purchaseInvoiceId),
+  })
+);
+
+// Supplier Payments
+export const procurementSupplierPayments = pgTable(
+  "procurement_supplier_payments",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    paymentNumber: text("payment_number").notNull(),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => inventorySuppliers.id, { onDelete: "cascade" }),
+    purchaseInvoiceId: text("purchase_invoice_id").references(() => procurementPurchaseInvoices.id, {
+      onDelete: "set null",
+    }),
+    amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+    currency: text("currency").default("KES").notNull(),
+    method: paymentMethodEnum("method").notNull(),
+    status: supplierPaymentStatusEnum("status").default("pending").notNull(),
+    paymentDate: timestamp("payment_date", { mode: "date" }).notNull(),
+    reference: text("reference"),
+    journalEntryId: text("journal_entry_id").references(() => journalEntries.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("psp_org_idx").on(table.organizationId),
+    userIdx: index("psp_user_idx").on(table.userId),
+    supplierIdx: index("psp_supplier_idx").on(table.supplierId),
+    invoiceIdx: index("psp_invoice_idx").on(table.purchaseInvoiceId),
+    numberIdx: uniqueIndex("unique_org_psp_number").on(
+      table.organizationId,
+      table.paymentNumber
+    ),
+    statusIdx: index("psp_status_idx").on(table.status),
+  })
+);
+
+// Budget Control
+export const procurementBudgets = pgTable(
+  "procurement_budgets",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    category: text("category"),
+    period: budgetPeriodEnum("period").default("monthly").notNull(),
+    periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+    currency: text("currency").default("KES").notNull(),
+    amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+    spent: decimal("spent", { precision: 14, scale: 2 }).default("0"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("pb_org_idx").on(table.organizationId),
+    userIdx: index("pb_user_idx").on(table.userId),
+    periodIdx: index("pb_period_idx").on(table.periodStart, table.periodEnd),
+  })
+);
+
+// AI Purchase Recommendations & Low-stock Suggestions
+export const procurementAiRecommendations = pgTable(
+  "procurement_ai_recommendations",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    type: text("type").notNull(), // reorder | low_stock | consolidate | substitute | supplier
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    priority: text("priority").default("normal").notNull(),
+    productId: text("product_id").references(() => inventoryProducts.id, {
+      onDelete: "set null",
+    }),
+    recommendedSupplierId: text("recommended_supplier_id").references(() => inventorySuppliers.id, {
+      onDelete: "set null",
+    }),
+    recommendedQty: decimal("recommended_qty", { precision: 12, scale: 2 }),
+    estimatedCost: decimal("estimated_cost", { precision: 14, scale: 2 }),
+    status: recommendationStatusEnum("status").default("open").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>().default({}),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    orgIdx: index("par_org_idx").on(table.organizationId),
+    typeIdx: index("par_type_idx").on(table.type),
+    statusIdx: index("par_status_idx").on(table.status),
+    productIdx: index("par_product_idx").on(table.productId),
+  })
+);
+
+// ── Procurement relations ──────────────────────────────────────────────────────
+
+export const procurementPurchaseRequestsRelations = relations(
+  procurementPurchaseRequests,
+  ({ one, many }) => ({
+    user: one(users, { fields: [procurementPurchaseRequests.userId], references: [users.id] }),
+    approver: one(users, { fields: [procurementPurchaseRequests.approvedBy], references: [users.id] }),
+    requester: one(users, { fields: [procurementPurchaseRequests.requesterId], references: [users.id] }),
+    items: many(procurementPurchaseRequestItems),
+    approvals: many(procurementApprovals),
+  })
+);
+
+export const procurementPurchaseRequestItemsRelations = relations(
+  procurementPurchaseRequestItems,
+  ({ one }) => ({
+    request: one(procurementPurchaseRequests, {
+      fields: [procurementPurchaseRequestItems.requestId],
+      references: [procurementPurchaseRequests.id],
+    }),
+    product: one(inventoryProducts, {
+      fields: [procurementPurchaseRequestItems.productId],
+      references: [inventoryProducts.id],
+    }),
+  })
+);
+
+export const procurementRfqsRelations = relations(procurementRfqs, ({ one, many }) => ({
+  user: one(users, { fields: [procurementRfqs.userId], references: [users.id] }),
+  items: many(procurementRfqItems),
+  suppliers: many(procurementRfqSuppliers),
+  quotations: many(procurementSupplierQuotations),
+  approvals: many(procurementApprovals),
+}));
+
+export const procurementRfqItemsRelations = relations(procurementRfqItems, ({ one, many }) => ({
+  rfq: one(procurementRfqs, {
+    fields: [procurementRfqItems.rfqId],
+    references: [procurementRfqs.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [procurementRfqItems.productId],
+    references: [inventoryProducts.id],
+  }),
+  quotationItems: many(procurementSupplierQuotationItems),
+}));
+
+export const procurementRfqSuppliersRelations = relations(procurementRfqSuppliers, ({ one }) => ({
+  rfq: one(procurementRfqs, {
+    fields: [procurementRfqSuppliers.rfqId],
+    references: [procurementRfqs.id],
+  }),
+  supplier: one(inventorySuppliers, {
+    fields: [procurementRfqSuppliers.supplierId],
+    references: [inventorySuppliers.id],
+  }),
+}));
+
+export const procurementSupplierQuotationsRelations = relations(
+  procurementSupplierQuotations,
+  ({ one, many }) => ({
+    user: one(users, { fields: [procurementSupplierQuotations.userId], references: [users.id] }),
+    rfq: one(procurementRfqs, {
+      fields: [procurementSupplierQuotations.rfqId],
+      references: [procurementRfqs.id],
+    }),
+    supplier: one(inventorySuppliers, {
+      fields: [procurementSupplierQuotations.supplierId],
+      references: [inventorySuppliers.id],
+    }),
+    items: many(procurementSupplierQuotationItems),
+  })
+);
+
+export const procurementSupplierQuotationItemsRelations = relations(
+  procurementSupplierQuotationItems,
+  ({ one }) => ({
+    quotation: one(procurementSupplierQuotations, {
+      fields: [procurementSupplierQuotationItems.quotationId],
+      references: [procurementSupplierQuotations.id],
+    }),
+    rfqItem: one(procurementRfqItems, {
+      fields: [procurementSupplierQuotationItems.rfqItemId],
+      references: [procurementRfqItems.id],
+    }),
+    product: one(inventoryProducts, {
+      fields: [procurementSupplierQuotationItems.productId],
+      references: [inventoryProducts.id],
+    }),
+  })
+);
+
+export const procurementPurchaseOrdersRelations = relations(
+  procurementPurchaseOrders,
+  ({ one, many }) => ({
+    user: one(users, { fields: [procurementPurchaseOrders.userId], references: [users.id] }),
+    supplier: one(inventorySuppliers, {
+      fields: [procurementPurchaseOrders.supplierId],
+      references: [inventorySuppliers.id],
+    }),
+    request: one(procurementPurchaseRequests, {
+      fields: [procurementPurchaseOrders.requestId],
+      references: [procurementPurchaseRequests.id],
+    }),
+    rfq: one(procurementRfqs, {
+      fields: [procurementPurchaseOrders.rfqId],
+      references: [procurementRfqs.id],
+    }),
+    budget: one(procurementBudgets, {
+      fields: [procurementPurchaseOrders.budgetId],
+      references: [procurementBudgets.id],
+    }),
+    approver: one(users, { fields: [procurementPurchaseOrders.approvedBy], references: [users.id] }),
+    items: many(procurementPurchaseOrderItems),
+    approvals: many(procurementApprovals),
+    grns: many(procurementGrns),
+    invoices: many(procurementPurchaseInvoices),
+  })
+);
+
+export const procurementPurchaseOrderItemsRelations = relations(
+  procurementPurchaseOrderItems,
+  ({ one, many }) => ({
+    purchaseOrder: one(procurementPurchaseOrders, {
+      fields: [procurementPurchaseOrderItems.purchaseOrderId],
+      references: [procurementPurchaseOrders.id],
+    }),
+    product: one(inventoryProducts, {
+      fields: [procurementPurchaseOrderItems.productId],
+      references: [inventoryProducts.id],
+    }),
+    warehouse: one(inventoryWarehouses, {
+      fields: [procurementPurchaseOrderItems.warehouseId],
+      references: [inventoryWarehouses.id],
+    }),
+    grnItems: many(procurementGrnItems),
+    invoiceItems: many(procurementPurchaseInvoiceItems),
+  })
+);
+
+export const procurementApprovalsRelations = relations(procurementApprovals, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [procurementApprovals.organizationId],
+    references: [organizations.id],
+  }),
+  approver: one(users, {
+    fields: [procurementApprovals.approverId],
+    references: [users.id],
+  }),
+}));
+
+export const procurementGrnsRelations = relations(procurementGrns, ({ one, many }) => ({
+  user: one(users, { fields: [procurementGrns.userId], references: [users.id] }),
+  purchaseOrder: one(procurementPurchaseOrders, {
+    fields: [procurementGrns.purchaseOrderId],
+    references: [procurementPurchaseOrders.id],
+  }),
+  supplier: one(inventorySuppliers, {
+    fields: [procurementGrns.supplierId],
+    references: [inventorySuppliers.id],
+  }),
+  items: many(procurementGrnItems),
+  returns: many(procurementSupplierReturns),
+  invoices: many(procurementPurchaseInvoices),
+}));
+
+export const procurementGrnItemsRelations = relations(procurementGrnItems, ({ one, many }) => ({
+  grn: one(procurementGrns, {
+    fields: [procurementGrnItems.grnId],
+    references: [procurementGrns.id],
+  }),
+  poItem: one(procurementPurchaseOrderItems, {
+    fields: [procurementGrnItems.poItemId],
+    references: [procurementPurchaseOrderItems.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [procurementGrnItems.productId],
+    references: [inventoryProducts.id],
+  }),
+  warehouse: one(inventoryWarehouses, {
+    fields: [procurementGrnItems.warehouseId],
+    references: [inventoryWarehouses.id],
+  }),
+  returnItems: many(procurementSupplierReturnItems),
+}));
+
+export const procurementSupplierReturnsRelations = relations(
+  procurementSupplierReturns,
+  ({ one, many }) => ({
+    user: one(users, { fields: [procurementSupplierReturns.userId], references: [users.id] }),
+    grn: one(procurementGrns, {
+      fields: [procurementSupplierReturns.grnId],
+      references: [procurementGrns.id],
+    }),
+    purchaseOrder: one(procurementPurchaseOrders, {
+      fields: [procurementSupplierReturns.purchaseOrderId],
+      references: [procurementPurchaseOrders.id],
+    }),
+    supplier: one(inventorySuppliers, {
+      fields: [procurementSupplierReturns.supplierId],
+      references: [inventorySuppliers.id],
+    }),
+    items: many(procurementSupplierReturnItems),
+  })
+);
+
+export const procurementSupplierReturnItemsRelations = relations(
+  procurementSupplierReturnItems,
+  ({ one }) => ({
+    returnRecord: one(procurementSupplierReturns, {
+      fields: [procurementSupplierReturnItems.returnId],
+      references: [procurementSupplierReturns.id],
+    }),
+    grnItem: one(procurementGrnItems, {
+      fields: [procurementSupplierReturnItems.grnItemId],
+      references: [procurementGrnItems.id],
+    }),
+    product: one(inventoryProducts, {
+      fields: [procurementSupplierReturnItems.productId],
+      references: [inventoryProducts.id],
+    }),
+    warehouse: one(inventoryWarehouses, {
+      fields: [procurementSupplierReturnItems.warehouseId],
+      references: [inventoryWarehouses.id],
+    }),
+  })
+);
+
+export const procurementPurchaseInvoicesRelations = relations(
+  procurementPurchaseInvoices,
+  ({ one, many }) => ({
+    user: one(users, { fields: [procurementPurchaseInvoices.userId], references: [users.id] }),
+    supplier: one(inventorySuppliers, {
+      fields: [procurementPurchaseInvoices.supplierId],
+      references: [inventorySuppliers.id],
+    }),
+    purchaseOrder: one(procurementPurchaseOrders, {
+      fields: [procurementPurchaseInvoices.purchaseOrderId],
+      references: [procurementPurchaseOrders.id],
+    }),
+    grn: one(procurementGrns, {
+      fields: [procurementPurchaseInvoices.grnId],
+      references: [procurementGrns.id],
+    }),
+    journalEntry: one(journalEntries, {
+      fields: [procurementPurchaseInvoices.journalEntryId],
+      references: [journalEntries.id],
+    }),
+    items: many(procurementPurchaseInvoiceItems),
+    payments: many(procurementSupplierPayments),
+  })
+);
+
+export const procurementPurchaseInvoiceItemsRelations = relations(
+  procurementPurchaseInvoiceItems,
+  ({ one }) => ({
+    purchaseInvoice: one(procurementPurchaseInvoices, {
+      fields: [procurementPurchaseInvoiceItems.purchaseInvoiceId],
+      references: [procurementPurchaseInvoices.id],
+    }),
+    poItem: one(procurementPurchaseOrderItems, {
+      fields: [procurementPurchaseInvoiceItems.poItemId],
+      references: [procurementPurchaseOrderItems.id],
+    }),
+    product: one(inventoryProducts, {
+      fields: [procurementPurchaseInvoiceItems.productId],
+      references: [inventoryProducts.id],
+    }),
+  })
+);
+
+export const procurementSupplierPaymentsRelations = relations(
+  procurementSupplierPayments,
+  ({ one }) => ({
+    user: one(users, { fields: [procurementSupplierPayments.userId], references: [users.id] }),
+    supplier: one(inventorySuppliers, {
+      fields: [procurementSupplierPayments.supplierId],
+      references: [inventorySuppliers.id],
+    }),
+    purchaseInvoice: one(procurementPurchaseInvoices, {
+      fields: [procurementSupplierPayments.purchaseInvoiceId],
+      references: [procurementPurchaseInvoices.id],
+    }),
+    journalEntry: one(journalEntries, {
+      fields: [procurementSupplierPayments.journalEntryId],
+      references: [journalEntries.id],
+    }),
+  })
+);
+
+export const procurementBudgetsRelations = relations(procurementBudgets, ({ one, many }) => ({
+  user: one(users, { fields: [procurementBudgets.userId], references: [users.id] }),
+  orders: many(procurementPurchaseOrders),
+}));
+
+export const procurementAiRecommendationsRelations = relations(
+  procurementAiRecommendations,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [procurementAiRecommendations.organizationId],
+      references: [organizations.id],
+    }),
+    user: one(users, {
+      fields: [procurementAiRecommendations.userId],
+      references: [users.id],
+    }),
+    product: one(inventoryProducts, {
+      fields: [procurementAiRecommendations.productId],
+      references: [inventoryProducts.id],
+    }),
+    recommendedSupplier: one(inventorySuppliers, {
+      fields: [procurementAiRecommendations.recommendedSupplierId],
+      references: [inventorySuppliers.id],
+    }),
+  })
+);
+
+// ── Procurement types ──────────────────────────────────────────────────────────
+export type ProcurementPurchaseRequest =
+  typeof procurementPurchaseRequests.$inferSelect;
+export type ProcurementPurchaseRequestItem =
+  typeof procurementPurchaseRequestItems.$inferSelect;
+export type ProcurementRfq = typeof procurementRfqs.$inferSelect;
+export type ProcurementRfqItem = typeof procurementRfqItems.$inferSelect;
+export type ProcurementRfqSupplier = typeof procurementRfqSuppliers.$inferSelect;
+export type ProcurementSupplierQuotation =
+  typeof procurementSupplierQuotations.$inferSelect;
+export type ProcurementSupplierQuotationItem =
+  typeof procurementSupplierQuotationItems.$inferSelect;
+export type ProcurementPurchaseOrder =
+  typeof procurementPurchaseOrders.$inferSelect;
+export type ProcurementPurchaseOrderItem =
+  typeof procurementPurchaseOrderItems.$inferSelect;
+export type ProcurementApproval = typeof procurementApprovals.$inferSelect;
+export type ProcurementGrn = typeof procurementGrns.$inferSelect;
+export type ProcurementGrnItem = typeof procurementGrnItems.$inferSelect;
+export type ProcurementSupplierReturn =
+  typeof procurementSupplierReturns.$inferSelect;
+export type ProcurementSupplierReturnItem =
+  typeof procurementSupplierReturnItems.$inferSelect;
+export type ProcurementPurchaseInvoice =
+  typeof procurementPurchaseInvoices.$inferSelect;
+export type ProcurementPurchaseInvoiceItem =
+  typeof procurementPurchaseInvoiceItems.$inferSelect;
+export type ProcurementSupplierPayment =
+  typeof procurementSupplierPayments.$inferSelect;
+export type ProcurementBudget = typeof procurementBudgets.$inferSelect;
+export type ProcurementAiRecommendation =
+  typeof procurementAiRecommendations.$inferSelect;
+
+// Procurement enums (TypeScript unions)
+export type ProcurementRequestStatus =
+  (typeof procurementRequestStatusEnum.enumValues)[number];
+export type RfqStatus = (typeof rfqStatusEnum.enumValues)[number];
+export type SupplierQuotationStatus =
+  (typeof supplierQuotationStatusEnum.enumValues)[number];
+export type ProcurementPOStatus =
+  (typeof procurementPOStatusEnum.enumValues)[number];
+export type GrnStatus = (typeof grnStatusEnum.enumValues)[number];
+export type SupplierReturnStatus =
+  (typeof supplierReturnStatusEnum.enumValues)[number];
+export type PurchaseInvoiceStatus =
+  (typeof purchaseInvoiceStatusEnum.enumValues)[number];
+export type SupplierPaymentStatus =
+  (typeof supplierPaymentStatusEnum.enumValues)[number];
+export type BudgetPeriod = (typeof budgetPeriodEnum.enumValues)[number];
+export type ApprovalLevelStatus =
+  (typeof approvalLevelStatusEnum.enumValues)[number];
+export type RecommendationStatus =
+  (typeof recommendationStatusEnum.enumValues)[number];

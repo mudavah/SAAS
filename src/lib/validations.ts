@@ -450,6 +450,201 @@ export type CrmDealInput = z.infer<typeof crmDealSchema>;
 export type CrmActivityInput = z.infer<typeof crmActivitySchema>;
 export type CrmQuotationInput = z.infer<typeof crmQuotationSchema>;
 
+// ── Procurement (Epic 3) ───────────────────────────────────────────────────────
+
+const priorityValues = ["low", "medium", "high", "urgent"] as const;
+
+export const procurementPurchaseRequestSchema = z.object({
+  title: z.string().min(2, "Title is required"),
+  department: z.string().optional(),
+  requesterId: z.string().optional(),
+  priority: z.enum(priorityValues).default("medium"),
+  notes: z.string().optional(),
+  requestedDate: z.coerce.date(),
+  neededBy: z.coerce.date().optional(),
+  currency: z.string().default("KES"),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().optional(),
+        description: z.string().min(1, "Description is required"),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unit: z.string().default("pcs"),
+        estUnitCost: z.coerce.number().min(0).default(0),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementRfqSchema = z.object({
+  title: z.string().min(2, "Title is required"),
+  validUntil: z.coerce.date().optional(),
+  notes: z.string().optional(),
+  supplierIds: z.array(z.string()).min(1, "Select at least one supplier"),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().optional(),
+        description: z.string().min(1, "Description is required"),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unit: z.string().default("pcs"),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementSupplierQuotationSchema = z.object({
+  rfqId: z.string().optional(),
+  supplierId: z.string().min(1, "Supplier is required"),
+  quotationNumber: z.string().min(1, "Quotation number is required"),
+  receivedDate: z.coerce.date(),
+  validUntil: z.coerce.date().optional(),
+  currency: z.string().default("KES"),
+  taxRate: z.coerce.number().min(0).max(100).default(16),
+  notes: z.string().optional(),
+  items: z
+    .array(
+      z.object({
+        rfqItemId: z.string().optional(),
+        productId: z.string().optional(),
+        description: z.string().min(1, "Description is required"),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unit: z.string().default("pcs"),
+        unitPrice: z.coerce.number().min(0),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementPurchaseOrderSchema = z.object({
+  requestId: z.string().optional(),
+  rfqId: z.string().optional(),
+  supplierId: z.string().optional(),
+  budgetId: z.string().optional(),
+  orderDate: z.coerce.date(),
+  expectedDate: z.coerce.date().optional(),
+  currency: z.string().default("KES"),
+  taxRate: z.coerce.number().min(0).max(100).default(16),
+  notes: z.string().optional(),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().optional(),
+        description: z.string().min(1, "Description is required"),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unit: z.string().default("pcs"),
+        unitCost: z.coerce.number().min(0),
+        taxRate: z.coerce.number().min(0).max(100).default(16),
+        warehouseId: z.string().optional(),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementGrnSchema = z.object({
+  receivedDate: z.coerce.date(),
+  notes: z.string().optional(),
+  items: z
+    .array(
+      z.object({
+        poItemId: z.string().min(1, "PO item is required"),
+        productId: z.string().optional(),
+        warehouseId: z.string().min(1, "Warehouse is required"),
+        quantityReceived: z.coerce.number().positive("Quantity must be positive"),
+        quantityDamaged: z.coerce.number().min(0).default(0),
+        unitCost: z.coerce.number().min(0).optional(),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementSupplierReturnSchema = z.object({
+  grnId: z.string().optional(),
+  purchaseOrderId: z.string().optional(),
+  supplierId: z.string().optional(),
+  returnDate: z.coerce.date(),
+  reason: z.string().optional(),
+  notes: z.string().optional(),
+  items: z
+    .array(
+      z.object({
+        grnItemId: z.string().optional(),
+        productId: z.string().optional(),
+        warehouseId: z.string().optional(),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unitCost: z.coerce.number().min(0).default(0),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementPurchaseInvoiceSchema = z.object({
+  supplierId: z.string().min(1, "Supplier is required"),
+  purchaseOrderId: z.string().optional(),
+  grnId: z.string().optional(),
+  invoiceNumber: z.string().min(1, "Invoice number is required"),
+  issueDate: z.coerce.date(),
+  dueDate: z.coerce.date(),
+  currency: z.string().default("KES"),
+  taxRate: z.coerce.number().min(0).max(100).default(16),
+  notes: z.string().optional(),
+  postToBookkeeping: z.boolean().default(true),
+  items: z
+    .array(
+      z.object({
+        poItemId: z.string().optional(),
+        productId: z.string().optional(),
+        description: z.string().min(1, "Description is required"),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unitCost: z.coerce.number().min(0),
+        taxRate: z.coerce.number().min(0).max(100).default(16),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export const procurementSupplierPaymentSchema = z.object({
+  supplierId: z.string().min(1, "Supplier is required"),
+  purchaseInvoiceId: z.string().optional(),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  currency: z.string().default("KES"),
+  method: z.enum(["mpesa", "stripe", "cash", "bank_transfer", "other"]),
+  paymentDate: z.coerce.date(),
+  reference: z.string().optional(),
+  notes: z.string().optional(),
+  postToBookkeeping: z.boolean().default(true),
+});
+
+export const procurementBudgetSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  category: z.string().optional(),
+  period: z.enum(["monthly", "quarterly", "annual"]).default("monthly"),
+  periodStart: z.coerce.date(),
+  periodEnd: z.coerce.date(),
+  currency: z.string().default("KES"),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  notes: z.string().optional(),
+});
+
+export const procurementApprovalDecisionSchema = z.object({
+  comments: z.string().optional(),
+});
+
+export const procurementAiRecommendationSchema = z.object({
+  status: z.enum(["open", "dismissed", "applied"]).optional(),
+});
+
+export type ProcurementPurchaseRequestInput = z.infer<typeof procurementPurchaseRequestSchema>;
+export type ProcurementRfqInput = z.infer<typeof procurementRfqSchema>;
+export type ProcurementSupplierQuotationInput = z.infer<typeof procurementSupplierQuotationSchema>;
+export type ProcurementPurchaseOrderInput = z.infer<typeof procurementPurchaseOrderSchema>;
+export type ProcurementGrnInput = z.infer<typeof procurementGrnSchema>;
+export type ProcurementSupplierReturnInput = z.infer<typeof procurementSupplierReturnSchema>;
+export type ProcurementPurchaseInvoiceInput = z.infer<typeof procurementPurchaseInvoiceSchema>;
+export type ProcurementSupplierPaymentInput = z.infer<typeof procurementSupplierPaymentSchema>;
+export type ProcurementBudgetInput = z.infer<typeof procurementBudgetSchema>;
+export type ProcurementApprovalDecisionInput = z.infer<typeof procurementApprovalDecisionSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

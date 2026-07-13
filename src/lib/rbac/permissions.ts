@@ -42,6 +42,17 @@ export type PermissionKey =
   | "purchasing.create"
   | "purchasing.approve"
   | "purchasing.receive"
+  | "purchasing.requests.manage"
+  | "purchasing.rfq.manage"
+  | "purchasing.quotations.manage"
+  | "purchasing.po.manage"
+  | "purchasing.grn.manage"
+  | "purchasing.returns.manage"
+  | "purchasing.invoices.manage"
+  | "purchasing.payments.manage"
+  | "purchasing.suppliers.manage"
+  | "purchasing.budget.manage"
+  | "purchasing.reports.view"
   | "bookkeeping.view"
   | "bookkeeping.manage"
   | "bookkeeping.post"
@@ -131,8 +142,19 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
 
   "purchasing.view": { key: "purchasing.view", category: "purchasing", name: "View Purchase Orders", description: "View purchase orders" },
   "purchasing.create": { key: "purchasing.create", category: "purchasing", name: "Create Purchase Orders", description: "Create purchase orders" },
-  "purchasing.approve": { key: "purchasing.approve", category: "purchasing", name: "Approve Purchase Orders", description: "Approve purchase orders" },
+  "purchasing.approve": { key: "purchasing.approve", category: "purchasing", name: "Approve Purchase Orders", description: "Approve purchase orders and requests" },
   "purchasing.receive": { key: "purchasing.receive", category: "purchasing", name: "Receive Purchase Orders", description: "Receive purchase orders" },
+  "purchasing.requests.manage": { key: "purchasing.requests.manage", category: "purchasing", name: "Manage Purchase Requests", description: "Create and manage purchase requisitions" },
+  "purchasing.rfq.manage": { key: "purchasing.rfq.manage", category: "purchasing", name: "Manage RFQs", description: "Create and issue requests for quotations" },
+  "purchasing.quotations.manage": { key: "purchasing.quotations.manage", category: "purchasing", name: "Manage Supplier Quotations", description: "Record and compare supplier quotations" },
+  "purchasing.po.manage": { key: "purchasing.po.manage", category: "purchasing", name: "Manage Purchase Orders", description: "Create, submit, order and cancel purchase orders" },
+  "purchasing.grn.manage": { key: "purchasing.grn.manage", category: "purchasing", name: "Manage Goods Received", description: "Create goods received notes and update inventory" },
+  "purchasing.returns.manage": { key: "purchasing.returns.manage", category: "purchasing", name: "Manage Supplier Returns", description: "Record returns to suppliers" },
+  "purchasing.invoices.manage": { key: "purchasing.invoices.manage", category: "purchasing", name: "Manage Purchase Invoices", description: "Record supplier purchase invoices and post to bookkeeping" },
+  "purchasing.payments.manage": { key: "purchasing.payments.manage", category: "purchasing", name: "Manage Supplier Payments", description: "Record payments to suppliers" },
+  "purchasing.suppliers.manage": { key: "purchasing.suppliers.manage", category: "purchasing", name: "Manage Suppliers", description: "Manage supplier profiles and performance" },
+  "purchasing.budget.manage": { key: "purchasing.budget.manage", category: "purchasing", name: "Manage Budgets", description: "Create and manage procurement budgets" },
+  "purchasing.reports.view": { key: "purchasing.reports.view", category: "purchasing", name: "View Procurement Reports", description: "View procurement analytics and reports" },
 
   "bookkeeping.view": { key: "bookkeeping.view", category: "bookkeeping", name: "View Bookkeeping", description: "View chart of accounts and journal" },
   "bookkeeping.manage": { key: "bookkeeping.manage", category: "bookkeeping", name: "Manage Bookkeeping", description: "Manage chart of accounts" },
@@ -278,6 +300,17 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "purchasing.create",
     "purchasing.approve",
     "purchasing.receive",
+    "purchasing.requests.manage",
+    "purchasing.rfq.manage",
+    "purchasing.quotations.manage",
+    "purchasing.po.manage",
+    "purchasing.grn.manage",
+    "purchasing.returns.manage",
+    "purchasing.invoices.manage",
+    "purchasing.payments.manage",
+    "purchasing.suppliers.manage",
+    "purchasing.budget.manage",
+    "purchasing.reports.view",
     "bookkeeping.view",
     "bookkeeping.manage",
     "bookkeeping.post",
@@ -319,6 +352,16 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "bookkeeping.view",
     "bookkeeping.manage",
     "bookkeeping.post",
+    "purchasing.view",
+    "purchasing.requests.manage",
+    "purchasing.rfq.manage",
+    "purchasing.quotations.manage",
+    "purchasing.po.manage",
+    "purchasing.invoices.manage",
+    "purchasing.payments.manage",
+    "purchasing.suppliers.manage",
+    "purchasing.budget.manage",
+    "purchasing.reports.view",
     ...FINANCIAL_REPORTING,
     ...COMPLIANCE_PERMS,
     "ai.access",
@@ -344,6 +387,15 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "purchasing.create",
     "purchasing.approve",
     "purchasing.receive",
+    "purchasing.requests.manage",
+    "purchasing.rfq.manage",
+    "purchasing.quotations.manage",
+    "purchasing.po.manage",
+    "purchasing.grn.manage",
+    "purchasing.returns.manage",
+    "purchasing.suppliers.manage",
+    "purchasing.budget.manage",
+    "purchasing.reports.view",
     "reports.view_financial",
     "crm.view",
     "crm.reports.view",
@@ -402,6 +454,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "expenses.create",
     "inventory.view",
     "purchasing.view",
+    "purchasing.requests.manage",
     "bookkeeping.view",
     "ai.access",
     "crm.view",
