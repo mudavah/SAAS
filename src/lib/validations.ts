@@ -223,6 +223,54 @@ export const etimsConfigSchema = z.object({
   isActive: z.boolean().default(false),
 });
 
+// ── Compliance Center ─────────────────────────────────────────────────────────
+
+export const taxReportGenerateSchema = z.object({
+  type: z.enum(["monthly", "quarterly", "annual"]),
+  // Anchor date within the target period; period bounds are derived from it.
+  anchorDate: z.coerce.date().optional(),
+  periodStart: z.coerce.date().optional(),
+  periodEnd: z.coerce.date().optional(),
+});
+
+export const taxCalendarEventSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  dueDate: z.coerce.date(),
+  type: z.string().min(1).default("custom"),
+  recurring: z.boolean().default(false),
+});
+
+export const taxCalendarUpdateSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  dueDate: z.coerce.date().optional(),
+  type: z.string().min(1).optional(),
+  recurring: z.boolean().optional(),
+  completed: z.boolean().optional(),
+});
+
+export const complianceAlertUpdateSchema = z.object({
+  read: z.boolean().optional(),
+  resolved: z.boolean().optional(),
+});
+
+export const complianceValidateSchema = z.object({
+  pin: z.string().optional(),
+  invoiceId: z.string().optional(),
+});
+
+export const complianceRetrySchema = z.object({
+  recordIds: z.array(z.string()).optional(),
+});
+
+export type TaxReportGenerateInput = z.infer<typeof taxReportGenerateSchema>;
+export type TaxCalendarEventInput = z.infer<typeof taxCalendarEventSchema>;
+export type TaxCalendarUpdateInput = z.infer<typeof taxCalendarUpdateSchema>;
+export type ComplianceAlertUpdateInput = z.infer<typeof complianceAlertUpdateSchema>;
+export type ComplianceValidateInput = z.infer<typeof complianceValidateSchema>;
+export type ComplianceRetryInput = z.infer<typeof complianceRetrySchema>;
+
 export type InventoryCategoryInput = z.infer<typeof inventoryCategorySchema>;
 export type InventoryBrandInput = z.infer<typeof inventoryBrandSchema>;
 export type InventorySupplierInput = z.infer<typeof inventorySupplierSchema>;
