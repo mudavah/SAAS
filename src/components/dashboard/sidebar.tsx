@@ -25,6 +25,7 @@ import {
   FileSearch,
   Wallet,
   Link2,
+  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/timeline", label: "Timeline", icon: Activity },
   { href: "/dashboard/invoices", label: "Invoices", icon: FileText },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
