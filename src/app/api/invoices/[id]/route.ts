@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { invoiceUpdateSchema } from "@/lib/validations";
+import { emitTimelineEvent } from "@/lib/timeline";
 
 export async function GET(
   req: Request,
@@ -75,6 +76,21 @@ export async function PATCH(
     newValues: parsed.data,
   });
 
+  try {
+    await emitTimelineEvent({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      eventType: "invoice.updated",
+      title: `Invoice ${updated.invoiceNumber} updated`,
+      description: `Status ${updated.status} · total ${updated.currency} ${updated.total}`,
+      resourceType: "invoice",
+      resourceId: updated.id,
+      metadata: { invoiceNumber: updated.invoiceNumber, status: updated.status },
+    });
+  } catch (e) {
+    console.error("Timeline emit failed (invoice.updated):", e);
+  }
+
   return NextResponse.json(updated);
 }
 
@@ -99,6 +115,20 @@ export async function DELETE(
     resourceId: id,
     description: `Deleted invoice ${id}`,
   });
+
+  try {
+    await emitTimelineEvent({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      eventType: "invoice.deleted",
+      title: `Invoice deleted`,
+      description: `Invoice ${id} was deleted`,
+      resourceType: "invoice",
+      resourceId: id,
+    });
+  } catch (e) {
+    console.error("Timeline emit failed (invoice.deleted):", e);
+  }
 
   return NextResponse.json({ success: true });
 }

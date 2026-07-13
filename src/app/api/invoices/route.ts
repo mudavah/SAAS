@@ -12,6 +12,7 @@ import {
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { emitTimelineEvent } from "@/lib/timeline";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "invoices.view");
@@ -164,6 +165,21 @@ export async function POST(req: Request) {
       priority: "normal",
       deepLink: `/dashboard/invoices/${invoice.id}`,
     });
+
+    try {
+      await emitTimelineEvent({
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        eventType: "invoice.created",
+        title: `Invoice ${invoice.invoiceNumber} created`,
+        description: `Total ${invoice.currency} ${invoice.total}${body.send ? " · sent to client" : ""}`,
+        resourceType: "invoice",
+        resourceId: invoice.id,
+        metadata: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, status: invoice.status },
+      });
+    } catch (e) {
+      console.error("Timeline emit failed (invoice.created):", e);
+    }
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {

@@ -68,7 +68,8 @@ export type PermissionKey =
   | "notifications.manage"
   | "settings.view"
   | "settings.manage"
-  | "subscription.manage";
+  | "subscription.manage"
+  | "timeline.view";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -158,6 +159,8 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "settings.manage": { key: "settings.manage", category: "settings", name: "Manage Settings", description: "Manage application settings" },
 
   "subscription.manage": { key: "subscription.manage", category: "subscription", name: "Manage Subscription", description: "Manage subscription plan" },
+
+  "timeline.view": { key: "timeline.view", category: "audit", name: "View Timeline", description: "View the business activity timeline" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -249,6 +252,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "team.invite",
     "roles.view",
     "notifications.view",
+    "timeline.view",
     "notifications.manage",
     "settings.view",
     "settings.manage",
@@ -280,6 +284,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     ...COMPLIANCE_PERMS,
     "ai.access",
     "notifications.view",
+    "timeline.view",
     "notifications.manage",
     ...TASK_PERMS,
   ],
@@ -299,6 +304,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "reports.view_financial",
     "ai.access",
     "notifications.view",
+    "timeline.view",
     ...TASK_PERMS,
   ],
 
@@ -311,6 +317,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "payments.receive",
     "expenses.view",
     "notifications.view",
+    "timeline.view",
     ...TASK_PERMS,
   ],
 
@@ -326,6 +333,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "inventory.view",
     "ai.access",
     "notifications.view",
+    "timeline.view",
     ...TASK_PERMS,
   ],
 
@@ -343,6 +351,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "bookkeeping.view",
     "ai.access",
     "notifications.view",
+    "timeline.view",
     "tasks.view",
     "tasks.create",
     "tasks.edit",
@@ -361,6 +370,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "compliance.view",
     "ai.access",
     "notifications.view",
+    "timeline.view",
     "tasks.view",
   ],
 };

@@ -539,6 +539,62 @@ export const apiKeyStatusEnum = pgEnum("api_key_status", [
   "revoked",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Business Timeline — centralized, read-only activity feed
+// ─────────────────────────────────────────────────────────────────────────────
+// The timeline is an additive, append-only aggregation of business events from
+// every module (invoices, payments, inventory, compliance, ...). Rows are never
+// updated or deleted by the application and are always organization-scoped.
+export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
+  // Invoices
+  "invoice.created",
+  "invoice.updated",
+  "invoice.deleted",
+  "invoice.sent",
+  "invoice.paid",
+  "invoice.overdue",
+  // Payments
+  "payment.received",
+  "payment.failed",
+  "payment.refunded",
+  // Expenses
+  "expense.created",
+  "expense.updated",
+  "expense.deleted",
+  // Clients
+  "client.created",
+  "client.updated",
+  "client.deleted",
+  // Inventory
+  "inventory.product_created",
+  "inventory.product_updated",
+  "inventory.stock_adjusted",
+  "inventory.low_stock",
+  // Bookkeeping
+  "journal.posted",
+  "journal.reversed",
+  // Subscriptions
+  "subscription.created",
+  "subscription.updated",
+  "subscription.cancelled",
+  // Team
+  "team.member_invited",
+  "team.member_joined",
+  "team.member_removed",
+  // Notifications
+  "notification.created",
+  // Audit
+  "audit.logged",
+  // Compliance (eTIMS)
+  "compliance.submitted",
+  "compliance.validated",
+  "compliance.failed",
+  // AI
+  "ai.insight_generated",
+  // Generic fallback
+  "system.event",
+]);
+
 // NextAuth tables
 export const users = pgTable("users", {
   id: text("id")
@@ -1810,6 +1866,43 @@ export const apiUsage = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BUSINESS TIMELINE — centralized activity feed
+// ─────────────────────────────────────────────────────────────────────────────
+export const businessTimeline = pgTable(
+  "business_timeline",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    // Actor who triggered the event. Null for system-generated events.
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    eventType: timelineEventTypeEnum("event_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    // The business object this event relates to (e.g. "invoice", "payment").
+    resourceType: text("resource_type"),
+    resourceId: text("resource_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("timeline_org_created").on(t.organizationId, t.createdAt),
+    index("timeline_org_type_created").on(
+      t.organizationId,
+      t.eventType,
+      t.createdAt
+    ),
+    index("timeline_resource").on(t.resourceType, t.resourceId),
+    index("timeline_user_created").on(t.userId, t.createdAt),
+  ]
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tenant scoping helper columns on existing business tables
 // ─────────────────────────────────────────────────────────────────────────────
 // `organizationId` is added to every business table so all data is isolated per
@@ -1913,6 +2006,17 @@ export const apiUsageRelations = relations(apiUsage, ({ one }) => ({
   organization: one(organizations, {
     fields: [apiUsage.organizationId],
     references: [organizations.id],
+  }),
+}));
+
+export const businessTimelineRelations = relations(businessTimeline, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [businessTimeline.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [businessTimeline.userId],
+    references: [users.id],
   }),
 }));
 
@@ -2134,6 +2238,11 @@ export type Notification = typeof notifications.$inferSelect;
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type ApiUsage = typeof apiUsage.$inferSelect;
+
+// Business timeline types
+export type BusinessTimelineEvent = typeof businessTimeline.$inferSelect;
+export type NewBusinessTimelineEvent = typeof businessTimeline.$inferInsert;
+export type TimelineEventType = (typeof timelineEventTypeEnum.enumValues)[number];
 
 // Payment engine types
 export type PaymentProviderConfig = typeof paymentProviderConfigs.$inferSelect;
