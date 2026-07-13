@@ -8,6 +8,7 @@ import type {
   OfflinePayment,
   OfflineExpense,
   OfflineSetting,
+  OfflineDB,
 } from "@/lib/offline/schema";
 import { openDB, get, put, del } from "@/lib/offline/db";
 import { queueOfflineChange, processSyncQueue } from "@/lib/sync/engine";
@@ -20,6 +21,7 @@ type OptimisticRecord<T> = T & { __optimistic?: boolean; __original?: T };
 type RollbackState<T> = {
   original: T;
   timestamp: number;
+  onRollback?: (original: T) => void;
 };
 
 type PendingOptimistic<T> = {
@@ -27,7 +29,7 @@ type PendingOptimistic<T> = {
   entity: EntityType;
   entityId: string;
   rollback: RollbackState<T> | null;
-  promise: Promise<{ success: boolean; error?: string }>;
+  promise: Promise<unknown>;
 };
 
 export interface OptimisticMutationOptions<T> {
@@ -54,7 +56,7 @@ export function useOptimisticMutation<T extends Record<string, unknown>>(): UseO
   const [isPending, setIsPending] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const pendingRef = useRef<Map<string, PendingOptimistic<T>>>(new Map());
-  const dbRef = useRef<ReturnType<typeof openDB> | null>(null);
+  const dbRef = useRef<OfflineDB | null>(null);
 
   const getDB = useCallback(async () => {
     if (!dbRef.current) {

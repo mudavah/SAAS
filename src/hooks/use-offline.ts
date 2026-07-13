@@ -84,8 +84,8 @@ export function useOffline() {
 
     const next: Partial<OfflineData> = {};
     for (const [entity, store] of Object.entries(ENTITY_STORES)) {
-      const records = await getAll<OfflineClient | OfflineProduct | OfflineInvoice | OfflinePayment | OfflineExpense>(db, store as OfflineStore);
-      next[entity as keyof Omit<OfflineData, "settings">] = records as OfflineClient[];
+      const records = await getAll(db, store as OfflineStore);
+      next[entity as keyof Omit<OfflineData, "settings">] = records as any;
     }
     const settings = await getAll<OfflineSetting>(db, "settings");
     next.settings = settings;
@@ -184,7 +184,7 @@ export function useOffline() {
 
       if (optimisticUpdate) {
         setData((prev) => {
-          const current = prev[entity] as T[];
+          const current = prev[entity] as unknown as T[];
           const next = optimisticUpdate(current);
           return { ...prev, [entity]: next } as OfflineData;
         });
@@ -194,7 +194,7 @@ export function useOffline() {
 
       const organizationId = (record as { organizationId?: string }).organizationId ?? "";
       if (organizationId) {
-        await queueOfflineChange(operation, entity, entityId, organizationId, record, priority);
+        await queueOfflineChange(operation, entity, entityId, organizationId, record as unknown as Record<string, unknown>, priority);
       }
 
       await refreshPendingCount();

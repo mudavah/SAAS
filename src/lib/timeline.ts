@@ -49,7 +49,7 @@ export async function emitTimelineEvent(
       resourceType: opts.resourceType ?? null,
       resourceId: opts.resourceId ?? null,
       metadata: opts.metadata ?? null,
-    });
+    } as any);
   } catch (err) {
     // Best-effort: timeline must never break the main flow.
     console.error("emitTimelineEvent failed:", err);

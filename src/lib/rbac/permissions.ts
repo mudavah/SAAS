@@ -69,7 +69,11 @@ export type PermissionKey =
   | "settings.view"
   | "settings.manage"
   | "subscription.manage"
-  | "timeline.view";
+  | "timeline.view"
+  | "sync.push"
+  | "sync.pull"
+  | "sync.conflict"
+  | "sync.status";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -161,6 +165,10 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "subscription.manage": { key: "subscription.manage", category: "subscription", name: "Manage Subscription", description: "Manage subscription plan" },
 
   "timeline.view": { key: "timeline.view", category: "audit", name: "View Timeline", description: "View the business activity timeline" },
+  "sync.push": { key: "sync.push", category: "sync", name: "Push Sync", description: "Push offline changes to server" },
+  "sync.pull": { key: "sync.pull", category: "sync", name: "Pull Sync", description: "Pull server changes to offline" },
+  "sync.conflict": { key: "sync.conflict", category: "sync", name: "Resolve Conflicts", description: "Resolve sync conflicts" },
+  "sync.status": { key: "sync.status", category: "sync", name: "View Sync Status", description: "View sync status" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];

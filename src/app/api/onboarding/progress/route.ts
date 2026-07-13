@@ -5,8 +5,8 @@ import {
   getOnboardingProgress,
 } from "@/lib/onboarding/service";
 
-export async function GET() {
-  const res = await getApiContext();
+export async function GET(req: Request) {
+  const res = await getApiContext(req);
   if ("error" in res) return res.error;
   const { ctx } = res;
 

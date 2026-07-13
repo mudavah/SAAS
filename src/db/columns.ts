@@ -63,10 +63,10 @@ export const encryptedText = customType<{
   dataType() {
     return "text";
   },
-  toDriver(value: string | null): string | null {
-    return encrypt(value);
+  toDriver(value: string): string {
+    return encrypt(value) ?? value;
   },
-  fromDriver(value: string | null): string | null {
-    return decrypt(value);
+  fromDriver(value: string): string {
+    return decrypt(value) ?? value;
   },
 });

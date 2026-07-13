@@ -32,7 +32,7 @@ export function openDB(): Promise<OfflineDB> {
 
     request.onerror = () => reject(request.error);
     request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-      const db = (event.target as IDBOpenDBRequest).result as OfflineDB;
+      const db = (event.target as IDBOpenDBRequest).result as unknown as OfflineDB;
 
       const stores: { name: OfflineStoreName; keyPath: string; indexes: { name: string; keyPath: string | string[] }[] }[] = [
         {
@@ -119,9 +119,9 @@ export function openDB(): Promise<OfflineDB> {
 export function getStore<T = OfflineRecord>(
   db: OfflineDB,
   storeName: OfflineStore
-): IDBPObjectStore<OfflineSchema, string, T> {
+): IDBObjectStore {
   const tx = db.transaction(storeName, "readwrite");
-  return tx.objectStore(storeName) as IDBPObjectStore<OfflineSchema, string, T>;
+  return tx.objectStore(storeName) as IDBObjectStore;
 }
 
 export async function put<T = OfflineRecord>(

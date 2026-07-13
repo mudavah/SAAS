@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { openDB, put, getAll, del } from "./db";
+import { openDB, get, put, getAll, del } from "./db";
 import type {
   OfflineStoreName,
   OperationPriority,

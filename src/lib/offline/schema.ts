@@ -1,4 +1,4 @@
-import type { DBSchema, IDBPDatabase, IDBPObjectStore } from "idb";
+import type { DBSchema } from "idb";
 
 export type OfflineStoreName =
   | "clients"
@@ -117,6 +117,37 @@ export interface OfflineSetting {
   updatedAt: string;
 }
 
+export type ConflictAction = "use_local" | "use_remote" | "merge" | "cancel";
+
+export interface ConflictContext {
+  entity: OfflineStoreName;
+  entityId: string;
+  local: Record<string, unknown>;
+  remote: Record<string, unknown>;
+  base?: Record<string, unknown> | null;
+  localUpdatedAt: number;
+  remoteUpdatedAt: number;
+}
+
+export interface ConflictRecord {
+  id: string;
+  organizationId: string;
+  entity: OfflineStoreName;
+  entityId: string;
+  localPayload?: Record<string, unknown>;
+  remotePayload?: Record<string, unknown>;
+  localVersion?: Record<string, unknown>;
+  remoteVersion?: Record<string, unknown>;
+  localUpdatedAt?: number;
+  remoteUpdatedAt?: number;
+  baseVersion?: Record<string, unknown> | null;
+  detectedAt: number;
+  resolution?: ConflictAction;
+  resolved?: boolean;
+  resolvedAt?: number;
+  checksum?: string;
+}
+
 export interface PendingOperation {
   id: string;
   operation: OperationType;
@@ -209,7 +240,7 @@ export interface OfflineSchema extends DBSchema {
   };
 }
 
-export type OfflineDB = IDBPDatabase<OfflineSchema>;
+export type OfflineDB = IDBDatabase;
 
 export type OfflineStore =
   | "clients"

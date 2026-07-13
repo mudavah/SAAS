@@ -271,11 +271,13 @@ export async function resolveConflict(
     if (!conflict) return false;
 
     const ctx: ConflictContext = {
-      local: conflict.localVersion,
-      remote: conflict.remoteVersion,
+      entity: conflict.entity,
+      entityId: conflict.entityId,
+      local: conflict.localVersion ?? {},
+      remote: conflict.remoteVersion ?? {},
       base: conflict.baseVersion ?? null,
-      localUpdatedAt: conflict.localUpdatedAt,
-      remoteUpdatedAt: conflict.remoteUpdatedAt,
+      localUpdatedAt: conflict.localUpdatedAt ?? Date.now(),
+      remoteUpdatedAt: conflict.remoteUpdatedAt ?? Date.now(),
     };
 
     const resolution = strategy === "last-write-wins"

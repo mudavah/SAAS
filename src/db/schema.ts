@@ -137,15 +137,20 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "invoice.deleted",
   "invoice.sent",
   "invoice.paid",
+  "invoice.overdue",
   "payment.received",
   "payment.failed",
   "payment.refunded",
   "client.created",
   "client.updated",
+  "client.deleted",
   "expense.created",
   "expense.updated",
+  "expense.deleted",
   "inventory.stock_adjusted",
   "inventory.product_created",
+  "inventory.product_updated",
+  "inventory.low_stock",
   "journal.posted",
   "journal.reversed",
   "subscription.created",
@@ -537,62 +542,6 @@ export const apiKeyStatusEnum = pgEnum("api_key_status", [
   "active",
   "inactive",
   "revoked",
-]);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Business Timeline — centralized, read-only activity feed
-// ─────────────────────────────────────────────────────────────────────────────
-// The timeline is an additive, append-only aggregation of business events from
-// every module (invoices, payments, inventory, compliance, ...). Rows are never
-// updated or deleted by the application and are always organization-scoped.
-export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
-  // Invoices
-  "invoice.created",
-  "invoice.updated",
-  "invoice.deleted",
-  "invoice.sent",
-  "invoice.paid",
-  "invoice.overdue",
-  // Payments
-  "payment.received",
-  "payment.failed",
-  "payment.refunded",
-  // Expenses
-  "expense.created",
-  "expense.updated",
-  "expense.deleted",
-  // Clients
-  "client.created",
-  "client.updated",
-  "client.deleted",
-  // Inventory
-  "inventory.product_created",
-  "inventory.product_updated",
-  "inventory.stock_adjusted",
-  "inventory.low_stock",
-  // Bookkeeping
-  "journal.posted",
-  "journal.reversed",
-  // Subscriptions
-  "subscription.created",
-  "subscription.updated",
-  "subscription.cancelled",
-  // Team
-  "team.member_invited",
-  "team.member_joined",
-  "team.member_removed",
-  // Notifications
-  "notification.created",
-  // Audit
-  "audit.logged",
-  // Compliance (eTIMS)
-  "compliance.submitted",
-  "compliance.validated",
-  "compliance.failed",
-  // AI
-  "ai.insight_generated",
-  // Generic fallback
-  "system.event",
 ]);
 
 // NextAuth tables
@@ -1866,43 +1815,6 @@ export const apiUsage = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUSINESS TIMELINE — centralized activity feed
-// ─────────────────────────────────────────────────────────────────────────────
-export const businessTimeline = pgTable(
-  "business_timeline",
-  {
-    id: text("id")
-      .primaryKey()
-      .$defaultFn(() => crypto.randomUUID()),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    // Actor who triggered the event. Null for system-generated events.
-    userId: text("user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    eventType: timelineEventTypeEnum("event_type").notNull(),
-    title: text("title").notNull(),
-    description: text("description"),
-    // The business object this event relates to (e.g. "invoice", "payment").
-    resourceType: text("resource_type"),
-    resourceId: text("resource_id"),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-  },
-  (t) => [
-    index("timeline_org_created").on(t.organizationId, t.createdAt),
-    index("timeline_org_type_created").on(
-      t.organizationId,
-      t.eventType,
-      t.createdAt
-    ),
-    index("timeline_resource").on(t.resourceType, t.resourceId),
-    index("timeline_user_created").on(t.userId, t.createdAt),
-  ]
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Tenant scoping helper columns on existing business tables
 // ─────────────────────────────────────────────────────────────────────────────
 // `organizationId` is added to every business table so all data is isolated per
@@ -2160,18 +2072,6 @@ export const aiBusinessHealthRelations = relations(aiBusinessHealth, ({ one }) =
   }),
 }));
 
-// Business Timeline relations
-export const businessTimelineRelations = relations(businessTimeline, ({ one }) => ({
-  user: one(users, {
-    fields: [businessTimeline.userId],
-    references: [users.id],
-  }),
-  organization: one(organizations, {
-    fields: [businessTimeline.organizationId],
-    references: [organizations.id],
-  }),
-}));
-
 // Onboarding relations
 export const onboardingStepsRelations = relations(onboardingSteps, ({ many }) => ({
   progress: many(onboardingProgress),
@@ -2291,6 +2191,5 @@ export type ComplianceAlertSeverity =
 export type TaxReportType = (typeof taxReportTypeEnum.enumValues)[number];
 export type AiConversationStatus =
   (typeof aiConversationStatusEnum.enumValues)[number];
-export type TimelineEventType = (typeof timelineEventTypeEnum.enumValues)[number];
 export type OnboardingStepStatus =
   (typeof onboardingStepStatusEnum.enumValues)[number];

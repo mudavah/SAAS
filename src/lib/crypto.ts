@@ -174,3 +174,13 @@ export function decryptConfigSecrets<T extends object>(config: T | null | undefi
   }
   return out as T;
 }
+
+export function simpleChecksum(value: unknown): string {
+  const raw = typeof value === "string" ? value : JSON.stringify(value ?? "");
+  let h = 0;
+  for (let i = 0; i < raw.length; i++) {
+    h = (h << 5) - h + raw.charCodeAt(i);
+    h |= 0;
+  }
+  return String(h);
+}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
   clients,
-  products,
+  inventoryProducts,
   invoices,
   payments,
   expenses,
@@ -28,19 +28,19 @@ export async function GET(req: Request) {
         query: db.query.clients.findMany({
           where: and(
             eq(clients.organizationId, ctx.organizationId),
-            gt(clients.updatedAt, since)
+            gt(clients.createdAt, since)
           ),
-          orderBy: (clients, { desc }) => [desc(clients.updatedAt)],
+          orderBy: (clients, { desc }) => [desc(clients.createdAt)],
         }),
       },
       {
         name: "products" as const,
-        query: db.query.products.findMany({
+        query: db.query.inventoryProducts.findMany({
           where: and(
-            eq(products.organizationId, ctx.organizationId),
-            gt(products.updatedAt, since)
+            eq(inventoryProducts.organizationId, ctx.organizationId),
+            gt(inventoryProducts.createdAt, since)
           ),
-          orderBy: (products, { desc }) => [desc(products.updatedAt)],
+          orderBy: (inventoryProducts, { desc }) => [desc(inventoryProducts.createdAt)],
         }),
       },
       {
@@ -48,9 +48,9 @@ export async function GET(req: Request) {
         query: db.query.invoices.findMany({
           where: and(
             eq(invoices.organizationId, ctx.organizationId),
-            gt(invoices.updatedAt, since)
+            gt(invoices.createdAt, since)
           ),
-          orderBy: (invoices, { desc }) => [desc(invoices.updatedAt)],
+          orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
         }),
       },
       {
@@ -58,9 +58,9 @@ export async function GET(req: Request) {
         query: db.query.payments.findMany({
           where: and(
             eq(payments.organizationId, ctx.organizationId),
-            gt(payments.updatedAt, since)
+            gt(payments.createdAt, since)
           ),
-          orderBy: (payments, { desc }) => [desc(payments.updatedAt)],
+          orderBy: (payments, { desc }) => [desc(payments.createdAt)],
         }),
       },
       {
@@ -68,9 +68,9 @@ export async function GET(req: Request) {
         query: db.query.expenses.findMany({
           where: and(
             eq(expenses.organizationId, ctx.organizationId),
-            gt(expenses.updatedAt, since)
+            gt(expenses.createdAt, since)
           ),
-          orderBy: (expenses, { desc }) => [desc(expenses.updatedAt)],
+          orderBy: (expenses, { desc }) => [desc(expenses.createdAt)],
         }),
       },
     ];
