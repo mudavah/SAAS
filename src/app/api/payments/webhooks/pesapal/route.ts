@@ -15,8 +15,9 @@ export async function POST(req: Request) {
     const body = JSON.parse(rawBody);
     const reference = (body as any)?.order_tracking_id as string | undefined;
 
-    const authError = await requireWebhookSecret(req, "pesapal", reference, rawBody);
-    if (authError) return authError;
+    const auth = await requireWebhookSecret(req, "pesapal", reference, rawBody);
+    if (auth.error) return auth.error;
+    const webhookOrgId = auth.organizationId;
 
     const webhookEvent = await processWebhook("pesapal", body);
 
@@ -46,7 +47,9 @@ export async function POST(req: Request) {
 
     if (webhookEvent.type === "payment.completed" && webhookEvent.paymentId) {
       const payment = await db.query.payments.findFirst({
-        where: eq(payments.reference, webhookEvent.paymentId),
+        where: webhookOrgId
+          ? and(eq(payments.reference, webhookEvent.paymentId), eq(payments.organizationId, webhookOrgId))
+          : eq(payments.reference, webhookEvent.paymentId),
       });
 
       if (!payment) {

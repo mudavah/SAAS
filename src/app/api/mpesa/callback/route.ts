@@ -18,11 +18,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
     }
 
-    const authError = await requireWebhookSecret(req, "mpesa", result.checkoutRequestId);
-    if (authError) return authError;
+    const auth = await requireWebhookSecret(req, "mpesa", result.checkoutRequestId);
+    if (auth.error) return auth.error;
+    const webhookOrgId = auth.organizationId;
 
     const payment = await db.query.payments.findFirst({
-      where: eq(payments.reference, result.checkoutRequestId),
+      where: webhookOrgId
+        ? and(eq(payments.reference, result.checkoutRequestId), eq(payments.organizationId, webhookOrgId))
+        : eq(payments.reference, result.checkoutRequestId),
     });
 
     if (!payment || payment.status !== "pending") {

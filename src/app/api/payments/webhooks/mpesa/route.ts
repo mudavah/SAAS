@@ -20,8 +20,9 @@ export async function POST(req: Request) {
     const body = JSON.parse(rawBody);
     const reference = getReference(body);
 
-    const authError = await requireWebhookSecret(req, "mpesa", reference, rawBody);
-    if (authError) return authError;
+    const auth = await requireWebhookSecret(req, "mpesa", reference, rawBody);
+    if (auth.error) return auth.error;
+    const webhookOrgId = auth.organizationId;
 
     const webhookEvent = await processWebhook("mpesa", body);
 
@@ -51,7 +52,9 @@ export async function POST(req: Request) {
 
     if (webhookEvent.type === "payment.completed" && webhookEvent.paymentId) {
       const payment = await db.query.payments.findFirst({
-        where: eq(payments.reference, webhookEvent.paymentId),
+        where: webhookOrgId
+          ? and(eq(payments.reference, webhookEvent.paymentId), eq(payments.organizationId, webhookOrgId))
+          : eq(payments.reference, webhookEvent.paymentId),
       });
 
       if (!payment) {
