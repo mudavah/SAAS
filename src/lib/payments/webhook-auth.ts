@@ -20,13 +20,21 @@ function computeSignature(rawBody: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
 }
 
+export interface WebhookAuthResult {
+  /** null means "allow" (no error); a NextResponse means reject. */
+  error: NextResponse | null;
+  /** Organization resolved from the payment reference, if any. */
+  organizationId?: string | null;
+}
+
 export async function requireWebhookSecret(
   req: Request,
   provider: PaymentProviderType,
   reference?: string,
   rawBody?: string,
-): Promise<NextResponse | null> {
+): Promise<WebhookAuthResult> {
   let expected: string | undefined;
+  let organizationId: string | null | undefined;
 
   if (reference) {
     const payment = await db.query.payments.findFirst({
@@ -34,6 +42,7 @@ export async function requireWebhookSecret(
       columns: { organizationId: true },
     });
     if (payment?.organizationId) {
+      organizationId = payment.organizationId;
       const cfg = await loadProviderConfig(payment.organizationId, provider);
       const orgSecret = (cfg?.webhookSecret as string | undefined) || undefined;
       if (orgSecret) expected = orgSecret;
@@ -50,25 +59,31 @@ export async function requireWebhookSecret(
 
   if (!expected) {
     if (process.env.NODE_ENV === "production") {
-      return NextResponse.json(
-        { error: "Webhook secret not configured" },
-        { status: 401 }
-      );
+      return {
+        error: NextResponse.json(
+          { error: "Webhook secret not configured" },
+          { status: 401 }
+        ),
+        organizationId,
+      };
     }
     console.warn(
       `[webhook] No webhook secret configured for provider "${provider}"; ` +
         "allowing unauthenticated webhook. Configure webhookSecret to secure it."
     );
-    return null;
+    return { error: null, organizationId };
   }
 
   const signature = req.headers.get("x-kf-signature");
   if (signature && rawBody) {
     const expectedSig = computeSignature(rawBody, expected);
     if (!timingSafeEqual(signature, expectedSig)) {
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+      return {
+        error: NextResponse.json({ error: "Invalid signature" }, { status: 401 }),
+        organizationId,
+      };
     }
-    return null;
+    return { error: null, organizationId };
   }
 
   const provided =
@@ -78,8 +93,11 @@ export async function requireWebhookSecret(
 
   if (!provided || !timingSafeEqual(provided, expected)) {
     console.warn(`[webhook] Rejected ${provider} webhook: bad/missing secret.`);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return {
+      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      organizationId,
+    };
   }
 
-  return null;
+  return { error: null, organizationId };
 }

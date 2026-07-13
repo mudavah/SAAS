@@ -11,7 +11,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:backfill": "node scripts/backfill-organizations.mjs"
+    "db:backfill": "node scripts/backfill-organizations.mjs",
+    "db:backfill-encryption": "node scripts/backfill-encryption.mjs",
+    "db:backfill-encryption": "node scripts/backfill-encryption.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
