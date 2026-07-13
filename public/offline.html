@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#006B3F" />
+    <title>Offline — KaziFlow</title>
+    <style>
+      :root {
+        --green: #006b3f;
+        --muted: #6b7280;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+          env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      .card {
+        text-align: center;
+        max-width: 360px;
+        padding: 32px 24px;
+      }
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        background: var(--green);
+        color: #fff;
+        font-weight: 700;
+        font-size: 20px;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 8px;
+      }
+      p {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 0 0 20px;
+      }
+      a {
+        display: inline-block;
+        background: var(--green);
+        color: #fff;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 12px 20px;
+        border-radius: 10px;
+        min-height: 44px;
+        line-height: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">KF</div>
+      <h1>You're offline</h1>
+      <p>
+        KaziFlow needs a connection to load this page. Your saved data is safe —
+        reconnect and try again.
+      </p>
+      <a href="/dashboard">Back to Dashboard</a>
+    </div>
+  </body>
+</html>

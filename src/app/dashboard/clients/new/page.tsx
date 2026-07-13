@@ -72,7 +72,7 @@ export default function NewClientPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone (M-Pesa)</Label>
-                <Input id="phone" placeholder="254712345678" {...register("phone")} />
+                <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="254712345678" {...register("phone")} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="company">Company</Label>

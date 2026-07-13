@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -56,7 +57,7 @@ const navItems = [
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const initials = session?.user?.name
     ?.split(" ")
@@ -65,11 +66,28 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     .toUpperCase()
     .slice(0, 2) || "U";
 
+  const isActive = (href: string) =>
+    pathname === href ||
+    (href !== "/dashboard" && pathname.startsWith(href));
+
+  const navLinkClass = (href: string) =>
+    cn(
+      "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors active:scale-95 touch-manipulation",
+      isActive(href)
+        ? "bg-kazi-green/10 text-kazi-green"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    );
+
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Mobile header */}
-      <header className="lg:hidden sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4">
-        <button onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+      <header className="lg:hidden sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background px-4 pt-[env(safe-area-inset-top)]">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="-ml-2 inline-flex h-11 w-11 items-center justify-center rounded-lg text-foreground transition-transform active:scale-90 touch-manipulation"
+        >
           <Menu className="h-6 w-6" />
         </button>
         <Link href="/dashboard" className="flex items-center gap-2">
@@ -80,61 +98,25 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </Link>
       </header>
 
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-50 bg-black/50"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-background border-r transform transition-transform lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
+      {/* Desktop sidebar (hidden on mobile; mobile uses the bottom sheet) */}
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r bg-background lg:flex">
         <div className="flex h-full flex-col">
-          <div className="flex h-14 items-center justify-between px-4 border-b">
+          <div className="flex h-14 items-center px-4 border-b">
             <Link href="/dashboard" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-kazi-green text-white font-bold text-sm">
                 KF
               </div>
               <span className="font-bold text-kazi-green">KaziFlow</span>
             </Link>
-            <button
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close menu"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
 
           <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" &&
-                  pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-kazi-green/10 text-kazi-green"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
+            {navItems.map((item) => (
+              <Link key={item.href} href={item.href} className={navLinkClass(item.href)}>
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
           </nav>
 
           <div className="border-t p-3">
@@ -157,7 +139,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <Button
               variant="ghost"
               size="sm"
-              className="w-full justify-start mt-1 text-muted-foreground"
+              className="w-full justify-start mt-1 min-h-[44px] text-muted-foreground"
               onClick={() => signOut({ callbackUrl: "/" })}
             >
               <LogOut className="mr-2 h-4 w-4" />
@@ -167,9 +149,64 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      {/* Mobile navigation: bottom sheet */}
+      <BottomSheet
+        open={mobileOpen}
+        onOpenChange={setMobileOpen}
+        title="Navigation"
+      >
+        <nav className="space-y-1">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "flex min-h-[48px] items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors active:scale-95 touch-manipulation",
+                isActive(item.href)
+                  ? "bg-kazi-green/10 text-kazi-green"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <item.icon className="h-5 w-5" />
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="mt-3 border-t pt-3">
+          <div className="flex items-center gap-3 px-1 py-2">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={session?.user?.image || ""} />
+              <AvatarFallback className="bg-kazi-green/10 text-kazi-green text-xs">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {session?.user?.name}
+              </p>
+              <Badge variant="secondary" className="text-xs capitalize">
+                {session?.user?.plan || "free"}
+              </Badge>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            className="w-full justify-start min-h-[48px] text-muted-foreground"
+            onClick={() => signOut({ callbackUrl: "/" })}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out
+          </Button>
+        </div>
+      </BottomSheet>
+
       {/* Main content */}
       <main className="lg:pl-64">
-        <div className="p-4 md:p-6 lg:p-8">{children}</div>
+        <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-6 lg:p-8 lg:pb-8">
+          {children}
+        </div>
       </main>
     </div>
   );
