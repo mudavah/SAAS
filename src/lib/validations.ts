@@ -283,6 +283,173 @@ export type ChartOfAccountInput = z.infer<typeof chartOfAccountsSchema>;
 export type JournalEntryInput = z.infer<typeof journalEntrySchema>;
 export type EtimsConfigInput = z.infer<typeof etimsConfigSchema>;
 
+// ── Enterprise CRM (Epic 2) ───────────────────────────────────────────────────
+
+const leadSourceValues = [
+  "website",
+  "referral",
+  "social_media",
+  "cold_call",
+  "email_campaign",
+  "event",
+  "partner",
+  "advertisement",
+  "other",
+] as const;
+
+const leadStatusValues = [
+  "new",
+  "contacted",
+  "qualified",
+  "unqualified",
+  "converted",
+  "lost",
+] as const;
+
+const dealStatusValues = ["open", "won", "lost"] as const;
+
+const activityTypeValues = [
+  "call",
+  "meeting",
+  "email",
+  "task",
+  "note",
+  "follow_up",
+] as const;
+
+const activityStatusValues = ["planned", "completed", "cancelled"] as const;
+
+const quotationStatusValues = [
+  "draft",
+  "sent",
+  "accepted",
+  "rejected",
+  "expired",
+  "converted",
+] as const;
+
+const quotationApprovalStatusValues = [
+  "not_required",
+  "pending",
+  "approved",
+  "rejected",
+] as const;
+
+export const crmCompanySchema = z.object({
+  name: z.string().min(2, "Company name is required"),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  website: z.string().url("Invalid URL").optional().or(z.literal("")),
+  industry: z.string().optional(),
+  size: z.string().optional(),
+  description: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().default("Kenya"),
+  taxId: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const crmContactSchema = z.object({
+  companyId: z.string().optional(),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().optional(),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  jobTitle: z.string().optional(),
+  department: z.string().optional(),
+  isPrimary: z.boolean().default(false),
+  notes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const crmLeadSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().optional(),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  company: z.string().optional(),
+  source: z.enum(leadSourceValues).default("other"),
+  status: z.enum(leadStatusValues).default("new"),
+  estimatedValue: z.coerce.number().min(0).default(0),
+  qualificationNotes: z.string().optional(),
+  assignedTo: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const crmPipelineStageSchema = z.object({
+  name: z.string().min(1, "Stage name is required"),
+  order: z.coerce.number().int().default(0),
+  probability: z.coerce.number().int().min(0).max(100).default(0),
+  color: z.string().default("#16a34a"),
+  isDefault: z.boolean().default(false),
+  isWon: z.boolean().default(false),
+  isLost: z.boolean().default(false),
+});
+
+export const crmDealSchema = z.object({
+  name: z.string().min(1, "Deal name is required"),
+  companyId: z.string().optional(),
+  contactId: z.string().optional(),
+  leadId: z.string().optional(),
+  stageId: z.string().optional(),
+  amount: z.coerce.number().min(0).default(0),
+  currency: z.string().default("KES"),
+  probability: z.coerce.number().min(0).max(100).optional(),
+  expectedCloseDate: z.coerce.date().optional(),
+  status: z.enum(dealStatusValues).default("open"),
+  lostReason: z.string().optional(),
+  ownerId: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const crmActivitySchema = z.object({
+  type: z.enum(activityTypeValues),
+  subject: z.string().min(1, "Subject is required"),
+  description: z.string().optional(),
+  status: z.enum(activityStatusValues).default("planned"),
+  priority: z.enum(["low", "medium", "high"]).default("medium"),
+  dueDate: z.coerce.date().optional(),
+  remindAt: z.coerce.date().optional(),
+  assignedTo: z.string().optional(),
+  leadId: z.string().optional(),
+  contactId: z.string().optional(),
+  companyId: z.string().optional(),
+  dealId: z.string().optional(),
+});
+
+export const crmQuotationSchema = z.object({
+  companyId: z.string().optional(),
+  contactId: z.string().optional(),
+  leadId: z.string().optional(),
+  dealId: z.string().optional(),
+  validUntil: z.coerce.date().optional(),
+  currency: z.string().default("KES"),
+  taxRate: z.coerce.number().min(0).max(100).default(16),
+  notes: z.string().optional(),
+  terms: z.string().optional(),
+  approvalStatus: z
+    .enum(quotationApprovalStatusValues)
+    .default("not_required"),
+  items: z
+    .array(
+      z.object({
+        description: z.string().min(1, "Description is required"),
+        quantity: z.coerce.number().positive("Quantity must be positive"),
+        unitPrice: z.coerce.number().min(0, "Price must be 0 or more"),
+      })
+    )
+    .min(1, "Add at least one item"),
+});
+
+export type CrmCompanyInput = z.infer<typeof crmCompanySchema>;
+export type CrmContactInput = z.infer<typeof crmContactSchema>;
+export type CrmLeadInput = z.infer<typeof crmLeadSchema>;
+export type CrmPipelineStageInput = z.infer<typeof crmPipelineStageSchema>;
+export type CrmDealInput = z.infer<typeof crmDealSchema>;
+export type CrmActivityInput = z.infer<typeof crmActivitySchema>;
+export type CrmQuotationInput = z.infer<typeof crmQuotationSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

@@ -28,7 +28,7 @@ export default async function InvoicesPage() {
     where: eq(invoices.organizationId, ctx.organizationId),
     orderBy: [desc(invoices.createdAt)],
     with: { client: true },
-  });
+  }) as any[];
 
   return (
     <DashboardShell>

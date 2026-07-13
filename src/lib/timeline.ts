@@ -108,7 +108,7 @@ export async function listTimelineEvents(
 
   const where = and(...conditions);
 
-  const [rows, totalResult] = await Promise.all([
+  const [rowsRaw, totalResult] = await Promise.all([
     db.query.businessTimeline.findMany({
       where,
       orderBy: [desc(businessTimeline.createdAt)],
@@ -123,6 +123,7 @@ export async function listTimelineEvents(
       .from(businessTimeline)
       .where(where),
   ]);
+  const rows = rowsRaw as any[];
 
   const total = Number(totalResult[0]?.count ?? 0);
   const nextCursor = offset + rows.length < total ? page + 1 : null;

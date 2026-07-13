@@ -73,7 +73,16 @@ export type PermissionKey =
   | "sync.push"
   | "sync.pull"
   | "sync.conflict"
-  | "sync.status";
+  | "sync.status"
+  | "crm.view"
+  | "crm.leads.manage"
+  | "crm.contacts.manage"
+  | "crm.deals.manage"
+  | "crm.activities.manage"
+  | "crm.quotations.manage"
+  | "crm.quotations.approve"
+  | "crm.reports.view"
+  | "crm.ai.access";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -169,6 +178,15 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "sync.pull": { key: "sync.pull", category: "sync", name: "Pull Sync", description: "Pull server changes to offline" },
   "sync.conflict": { key: "sync.conflict", category: "sync", name: "Resolve Conflicts", description: "Resolve sync conflicts" },
   "sync.status": { key: "sync.status", category: "sync", name: "View Sync Status", description: "View sync status" },
+  "crm.view": { key: "crm.view", category: "crm", name: "View CRM", description: "View CRM companies, contacts, leads, deals, activities and quotations" },
+  "crm.leads.manage": { key: "crm.leads.manage", category: "crm", name: "Manage Leads", description: "Capture, score, qualify and convert leads" },
+  "crm.contacts.manage": { key: "crm.contacts.manage", category: "crm", name: "Manage Companies & Contacts", description: "Create and edit companies and contact persons" },
+  "crm.deals.manage": { key: "crm.deals.manage", category: "crm", name: "Manage Deals", description: "Create and move deals through the sales pipeline" },
+  "crm.activities.manage": { key: "crm.activities.manage", category: "crm", name: "Manage Activities", description: "Log calls, meetings, emails, tasks, notes and follow-ups" },
+  "crm.quotations.manage": { key: "crm.quotations.manage", category: "crm", name: "Manage Quotations", description: "Create, version and convert quotations" },
+  "crm.quotations.approve": { key: "crm.quotations.approve", category: "crm", name: "Approve Quotations", description: "Approve or reject quotations in the approval workflow" },
+  "crm.reports.view": { key: "crm.reports.view", category: "crm", name: "View CRM Reports", description: "View CRM sales funnel, conversion and forecasting reports" },
+  "crm.ai.access": { key: "crm.ai.access", category: "crm", name: "Access CRM AI", description: "Use the AI CRM assistant for prioritization, predictions and insights" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -190,6 +208,16 @@ const TASK_PERMS: PermissionKey[] = [
   "tasks.create",
   "tasks.edit",
   "tasks.delete",
+];
+
+const CRM_PERMS: PermissionKey[] = [
+  "crm.view",
+  "crm.leads.manage",
+  "crm.contacts.manage",
+  "crm.deals.manage",
+  "crm.activities.manage",
+  "crm.quotations.manage",
+  "crm.reports.view",
 ];
 
 const FINANCIAL_REPORTING: PermissionKey[] = [
@@ -265,6 +293,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "settings.view",
     "settings.manage",
     ...TASK_PERMS,
+    ...CRM_PERMS,
+    "crm.quotations.approve",
+    "crm.ai.access",
   ],
 
   accountant: [
@@ -291,6 +322,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     ...FINANCIAL_REPORTING,
     ...COMPLIANCE_PERMS,
     "ai.access",
+    "crm.view",
+    "crm.reports.view",
+    "crm.quotations.approve",
+    "crm.ai.access",
     "notifications.view",
     "timeline.view",
     "notifications.manage",
@@ -310,6 +345,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "purchasing.approve",
     "purchasing.receive",
     "reports.view_financial",
+    "crm.view",
+    "crm.reports.view",
     "ai.access",
     "notifications.view",
     "timeline.view",
@@ -324,6 +361,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "payments.create",
     "payments.receive",
     "expenses.view",
+    "crm.view",
     "notifications.view",
     "timeline.view",
     ...TASK_PERMS,
@@ -340,6 +378,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "invoices.send",
     "inventory.view",
     "ai.access",
+    "crm.view",
+    "crm.leads.manage",
+    "crm.contacts.manage",
+    "crm.deals.manage",
+    "crm.activities.manage",
+    "crm.quotations.manage",
+    "crm.reports.view",
+    "crm.ai.access",
     "notifications.view",
     "timeline.view",
     ...TASK_PERMS,
@@ -358,6 +404,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "purchasing.view",
     "bookkeeping.view",
     "ai.access",
+    "crm.view",
     "notifications.view",
     "timeline.view",
     "tasks.view",
@@ -377,6 +424,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "reports.view_financial",
     "compliance.view",
     "ai.access",
+    "crm.view",
     "notifications.view",
     "timeline.view",
     "tasks.view",

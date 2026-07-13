@@ -275,7 +275,7 @@ export async function submitInvoice(
       );
     }
 
-    const payload = buildPayload(invoice);
+    const payload = buildPayload(invoice as any);
     const result = await submitInvoiceToEtims(config, payload);
 
     const responsePayload = {

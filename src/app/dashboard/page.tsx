@@ -48,7 +48,7 @@ async function getDashboardStats(organizationId: string) {
     orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
     limit: 5,
     with: { client: true },
-  });
+  }) as any[];
 
   return {
     pendingInvoices: pendingInvoices[0]?.count ?? 0,

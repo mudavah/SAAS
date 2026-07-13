@@ -11,7 +11,7 @@ import Link from "next/link";
 import { Shield, CheckCircle, XCircle, Clock, Settings, AlertTriangle } from "lucide-react";
 
 async function getComplianceStats(organizationId: string) {
-  const [config, etimsRecords] = await Promise.all([
+  const [config, etimsRecordsRaw] = await Promise.all([
     db.query.etimsConfig.findFirst({
       where: eq(etimsConfig.organizationId, organizationId),
     }),
@@ -28,6 +28,7 @@ async function getComplianceStats(organizationId: string) {
       },
     }),
   ]);
+  const etimsRecords = etimsRecordsRaw as any[];
 
   const totalInvoices = etimsRecords.length;
   const validated = etimsRecords.filter((r) => r.status === "validated").length;

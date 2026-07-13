@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { invoices, businesses } from "@/db/schema";
+import type { clients, invoiceItems } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { sendInvoiceEmail, isEmailConfigured } from "@/lib/email";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -9,6 +10,11 @@ import { buildInvoicePdfPayload } from "@/lib/invoice-pdf-data";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+
+type InvoiceWithRelations = typeof invoices.$inferSelect & {
+  client: typeof clients.$inferSelect | null;
+  items: (typeof invoiceItems.$inferSelect)[];
+};
 
 export async function POST(
   req: Request,
@@ -33,7 +39,7 @@ export async function POST(
   const invoice = await db.query.invoices.findFirst({
     where: and(eq(invoices.id, id), eq(invoices.organizationId, ctx.organizationId)),
     with: { client: true, items: true },
-  });
+  }) as InvoiceWithRelations | null;
 
   if (!invoice) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

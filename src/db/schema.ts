@@ -130,6 +130,68 @@ export const aiConversationStatusEnum = pgEnum("ai_conversation_status", [
   "archived",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enterprise CRM enums (Epic 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const leadSourceEnum = pgEnum("lead_source", [
+  "website",
+  "referral",
+  "social_media",
+  "cold_call",
+  "email_campaign",
+  "event",
+  "partner",
+  "advertisement",
+  "other",
+]);
+
+export const leadStatusEnum = pgEnum("lead_status", [
+  "new",
+  "contacted",
+  "qualified",
+  "unqualified",
+  "converted",
+  "lost",
+]);
+
+export const dealStatusEnum = pgEnum("deal_status", [
+  "open",
+  "won",
+  "lost",
+]);
+
+export const activityTypeEnum = pgEnum("activity_type", [
+  "call",
+  "meeting",
+  "email",
+  "task",
+  "note",
+  "follow_up",
+]);
+
+export const activityStatusEnum = pgEnum("activity_status", [
+  "planned",
+  "completed",
+  "cancelled",
+]);
+
+export const quotationStatusEnum = pgEnum("quotation_status", [
+  "draft",
+  "sent",
+  "accepted",
+  "rejected",
+  "expired",
+  "converted",
+]);
+
+export const quotationApprovalStatusEnum = pgEnum("quotation_approval_status", [
+  "not_required",
+  "pending",
+  "approved",
+  "rejected",
+]);
+
 // Business Timeline enums
 export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "invoice.created",
@@ -166,6 +228,19 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "team.member_joined",
   "team.member_removed",
   "onboarding.step_completed",
+  "crm.lead.created",
+  "crm.lead.updated",
+  "crm.lead.converted",
+  "crm.company.created",
+  "crm.company.updated",
+  "crm.contact.created",
+  "crm.deal.created",
+  "crm.deal.updated",
+  "crm.deal.won",
+  "crm.deal.lost",
+  "crm.quotation.created",
+  "crm.quotation.converted",
+  "crm.activity.completed",
 ]);
 
 // Onboarding enums
@@ -394,6 +469,346 @@ export const businessTimeline = pgTable("business_timeline", {
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// FEATURE — ENTERPRISE CRM (Epic 2)
+// ─────────────────────────────────────────────────────────────────────────────
+// Every CRM table is multi-tenant: it carries `organizationId` and user-scoped
+// ownership. Cross-references to leads/contacts/companies/deals are scoped so a
+// tenant can never read or mutate another tenant's CRM data. All mutations are
+// gated by RBAC, audited, and emit Business Timeline events.
+
+// Companies (accounts) — the anchor of the B2B CRM graph.
+export const crmCompanies = pgTable("crm_companies", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  website: text("website"),
+  industry: text("industry"),
+  size: text("size"),
+  description: text("description"),
+  address: text("address"),
+  city: text("city"),
+  country: text("country").default("Kenya"),
+  taxId: text("tax_id"),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_companies_org_idx").on(table.organizationId),
+  userIdx: index("crm_companies_user_idx").on(table.userId),
+}));
+
+// Contact persons — multiple per company, plus free-standing (companyless) contacts.
+export const crmContacts = pgTable("crm_contacts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").references(() => crmCompanies.id, {
+    onDelete: "set null",
+  }),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  jobTitle: text("job_title"),
+  department: text("department"),
+  isPrimary: boolean("is_primary").default(false).notNull(),
+  notes: text("notes"),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_contacts_org_idx").on(table.organizationId),
+  userIdx: index("crm_contacts_user_idx").on(table.userId),
+  companyIdx: index("crm_contacts_company_idx").on(table.companyId),
+}));
+
+// @ts-ignore
+// Leads — captured prospects with scoring, qualification and conversion.
+export let crmLeads = pgTable("crm_leads", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  source: leadSourceEnum("source").default("other").notNull(),
+  status: leadStatusEnum("status").default("new").notNull(),
+  score: integer("score").default(0).notNull(),
+  scoreReasons: jsonb("score_reasons").$type<string[]>().default([]),
+  estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }).default("0"),
+  qualificationNotes: text("qualification_notes"),
+  assignedTo: text("assigned_to").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  // Conversion outcome — set when the lead becomes a company/contact/deal.
+  convertedAt: timestamp("converted_at", { mode: "date" }),
+  convertedCompanyId: text("converted_company_id").references(() => crmCompanies.id, {
+    onDelete: "set null",
+  }),
+  convertedContactId: text("converted_contact_id").references(() => crmContacts.id, {
+    onDelete: "set null",
+  }),
+  // @ts-ignore
+  convertedDealId: text("converted_deal_id").references(() => crmDeals.id, {
+    onDelete: "set null",
+  }),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_leads_org_idx").on(table.organizationId),
+  userIdx: index("crm_leads_user_idx").on(table.userId),
+  statusIdx: index("crm_leads_status_idx").on(table.status),
+  scoreIdx: index("crm_leads_score_idx").on(table.score),
+  assignedIdx: index("crm_leads_assigned_idx").on(table.assignedTo),
+})) as any;
+
+// Custom pipeline stages (per-tenant ordered stages for the sales Kanban).
+export const crmPipelineStages = pgTable("crm_pipeline_stages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  order: integer("order").notNull().default(0),
+  // Default win probability for deals sitting in this stage.
+  probability: integer("probability").default(0),
+  color: text("color").default("#16a34a"),
+  isDefault: boolean("is_default").default(false).notNull(),
+  // Exactly one terminal "won" and one terminal "lost" stage drive win/loss.
+  isWon: boolean("is_won").default(false).notNull(),
+  isLost: boolean("is_lost").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_pipeline_stages_org_idx").on(table.organizationId),
+  orderIdx: index("crm_pipeline_stages_order_idx").on(table.organizationId, table.order),
+}));
+
+// Deals / opportunities in the sales pipeline.
+export const crmDeals = pgTable("crm_deals", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  companyId: text("company_id").references(() => crmCompanies.id, {
+    onDelete: "set null",
+  }),
+  contactId: text("contact_id").references(() => crmContacts.id, {
+    onDelete: "set null",
+  }),
+  leadId: text("lead_id").references(() => crmLeads.id, {
+    onDelete: "set null",
+  }),
+  stageId: text("stage_id").references(() => crmPipelineStages.id, {
+    onDelete: "set null",
+  }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).default("0"),
+  currency: text("currency").default("KES").notNull(),
+  // Probability 0-100; falls back to the stage default when null.
+  probability: integer("probability"),
+  expectedCloseDate: timestamp("expected_close_date", { mode: "date" }),
+  status: dealStatusEnum("status").default("open").notNull(),
+  actualCloseDate: timestamp("actual_close_date", { mode: "date" }),
+  lostReason: text("lost_reason"),
+  ownerId: text("owner_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_deals_org_idx").on(table.organizationId),
+  userIdx: index("crm_deals_user_idx").on(table.userId),
+  stageIdx: index("crm_deals_stage_idx").on(table.stageId),
+  statusIdx: index("crm_deals_status_idx").on(table.status),
+  ownerIdx: index("crm_deals_owner_idx").on(table.ownerId),
+  companyIdx: index("crm_deals_company_idx").on(table.companyId),
+}));
+
+// Activities (calls, meetings, emails, tasks, notes, follow-ups) — optionally
+// linked to a lead/contact/company/deal. Supports reminders and due dates.
+export const crmActivities = pgTable("crm_activities", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: activityTypeEnum("type").notNull(),
+  subject: text("subject").notNull(),
+  description: text("description"),
+  status: activityStatusEnum("status").default("planned").notNull(),
+  priority: taskPriorityEnum("priority").default("medium").notNull(),
+  dueDate: timestamp("due_date", { mode: "date" }),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  // When to surface a reminder notification (optional).
+  remindAt: timestamp("remind_at", { mode: "date" }),
+  assignedTo: text("assigned_to").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  leadId: text("lead_id").references(() => crmLeads.id, { onDelete: "set null" }),
+  contactId: text("contact_id").references(() => crmContacts.id, { onDelete: "set null" }),
+  companyId: text("company_id").references(() => crmCompanies.id, { onDelete: "set null" }),
+  dealId: text("deal_id").references(() => crmDeals.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_activities_org_idx").on(table.organizationId),
+  userIdx: index("crm_activities_user_idx").on(table.userId),
+  typeIdx: index("crm_activities_type_idx").on(table.type),
+  dueIdx: index("crm_activities_due_idx").on(table.dueDate),
+  remindIdx: index("crm_activities_remind_idx").on(table.remindAt),
+}));
+
+// @ts-ignore
+// Quotations (estimates) — can be versioned and converted to invoices.
+export let crmQuotations = pgTable("crm_quotations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  quotationNumber: text("quotation_number").notNull(),
+  companyId: text("company_id").references(() => crmCompanies.id, {
+    onDelete: "set null",
+  }),
+  contactId: text("contact_id").references(() => crmContacts.id, {
+    onDelete: "set null",
+  }),
+  leadId: text("lead_id").references(() => crmLeads.id, {
+    onDelete: "set null",
+  }),
+  dealId: text("deal_id").references(() => crmDeals.id, {
+    onDelete: "set null",
+  }),
+  status: quotationStatusEnum("status").default("draft").notNull(),
+  // Version history: each revision bumps `version` and links to its parent.
+  version: integer("version").default(1).notNull(),
+  // @ts-ignore
+  parentQuotationId: text("parent_quotation_id").references(() => crmQuotations.id, {
+    onDelete: "set null",
+  }),
+  validUntil: timestamp("valid_until", { mode: "date" }),
+  currency: text("currency").default("KES").notNull(),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).default("0"),
+  notes: text("notes"),
+  terms: text("terms"),
+  // Approval workflow.
+  approvalStatus: quotationApprovalStatusEnum("approval_status")
+    .default("not_required")
+    .notNull(),
+  approvedBy: text("approved_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  approvedAt: timestamp("approved_at", { mode: "date" }),
+  // Set once the quotation is converted into a KaziFlow invoice.
+  convertedInvoiceId: text("converted_invoice_id"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_quotations_org_idx").on(table.organizationId),
+  userIdx: index("crm_quotations_user_idx").on(table.userId),
+  numberIdx: uniqueIndex("unique_org_quotation_number").on(
+    table.organizationId,
+    table.quotationNumber
+  ),
+  statusIdx: index("crm_quotations_status_idx").on(table.status),
+  companyIdx: index("crm_quotations_company_idx").on(table.companyId),
+}));
+export const crmQuotationsAny = crmQuotations as any;
+
+export const crmQuotationItems = pgTable("crm_quotation_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  quotationId: text("quotation_id")
+    .notNull()
+    .references(() => crmQuotations.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+}, (table) => ({
+  orgIdx: index("crm_quotation_items_org_idx").on(table.organizationId),
+  quotationIdx: index("crm_quotation_items_quotation_idx").on(table.quotationId),
+}));
+
+// AI-generated CRM insights (cached recommendations per resource).
+export const crmAiInsights = pgTable("crm_ai_insights", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // lead_priority, deal_success, follow_up, summary, upsell, inactive
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  priority: text("priority").default("normal").notNull(),
+  resourceType: text("resource_type"), // lead | deal | contact | company
+  resourceId: text("resource_id"),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}),
+  read: boolean("read").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("crm_ai_insights_org_idx").on(table.organizationId),
+  userIdx: index("crm_ai_insights_user_idx").on(table.userId),
+  typeIdx: index("crm_ai_insights_type_idx").on(table.type),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Guided Onboarding tables
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -490,6 +905,7 @@ export const permissionCategoryEnum = pgEnum("permission_category", [
   "notifications",
   "settings",
   "subscription",
+  "crm",
 ]);
 
 // Audit logging
@@ -514,6 +930,7 @@ export const auditCategoryEnum = pgEnum("audit_category", [
   "settings",
   "notifications",
   "tasks",
+  "crm",
 ]);
 
 // Notifications
@@ -528,6 +945,7 @@ export const notificationCategoryEnum = pgEnum("notification_category", [
   "ai",
   "system",
   "organization",
+  "crm",
 ]);
 
 export const notificationPriorityEnum = pgEnum("notification_priority", [
@@ -1932,6 +2350,149 @@ export const businessTimelineRelations = relations(businessTimeline, ({ one }) =
   }),
 }));
 
+// Enterprise CRM relations
+export const crmCompaniesRelations = relations(crmCompanies, ({ one, many }) => ({
+  user: one(users, { fields: [crmCompanies.userId], references: [users.id] }),
+  contacts: many(crmContacts),
+  leads: many(crmLeads),
+  deals: many(crmDeals),
+  quotations: many(crmQuotations),
+  activities: many(crmActivities),
+}));
+
+export const crmContactsRelations = relations(crmContacts, ({ one, many }) => ({
+  user: one(users, { fields: [crmContacts.userId], references: [users.id] }),
+  company: one(crmCompanies, {
+    fields: [crmContacts.companyId],
+    references: [crmCompanies.id],
+  }),
+  activities: many(crmActivities),
+  quotations: many(crmQuotations),
+  deals: many(crmDeals),
+}));
+
+export const crmLeadsRelations = relations(crmLeads, ({ one, many }) => ({
+  user: one(users, { fields: [crmLeads.userId], references: [users.id] }),
+  assigned: one(users, {
+    fields: [crmLeads.assignedTo],
+    references: [users.id],
+  }),
+  convertedCompany: one(crmCompanies, {
+    fields: [crmLeads.convertedCompanyId],
+    references: [crmCompanies.id],
+  }),
+  convertedContact: one(crmContacts, {
+    fields: [crmLeads.convertedContactId],
+    references: [crmContacts.id],
+  }),
+  convertedDeal: one(crmDeals, {
+    fields: [crmLeads.convertedDealId],
+    references: [crmDeals.id],
+  }),
+  activities: many(crmActivities),
+  quotations: many(crmQuotations),
+  deals: many(crmDeals),
+}));
+
+export const crmPipelineStagesRelations = relations(crmPipelineStages, ({ one, many }) => ({
+  user: one(users, { fields: [crmPipelineStages.userId], references: [users.id] }),
+  deals: many(crmDeals),
+}));
+
+export const crmDealsRelations = relations(crmDeals, ({ one, many }) => ({
+  user: one(users, { fields: [crmDeals.userId], references: [users.id] }),
+  company: one(crmCompanies, {
+    fields: [crmDeals.companyId],
+    references: [crmCompanies.id],
+  }),
+  contact: one(crmContacts, {
+    fields: [crmDeals.contactId],
+    references: [crmContacts.id],
+  }),
+  lead: one(crmLeads, {
+    fields: [crmDeals.leadId],
+    references: [crmLeads.id],
+  }),
+  stage: one(crmPipelineStages, {
+    fields: [crmDeals.stageId],
+    references: [crmPipelineStages.id],
+  }),
+  owner: one(users, {
+    fields: [crmDeals.ownerId],
+    references: [users.id],
+  }),
+  activities: many(crmActivities),
+  quotations: many(crmQuotations),
+}));
+
+export const crmActivitiesRelations = relations(crmActivities, ({ one }) => ({
+  user: one(users, { fields: [crmActivities.userId], references: [users.id] }),
+  assigned: one(users, {
+    fields: [crmActivities.assignedTo],
+    references: [users.id],
+  }),
+  lead: one(crmLeads, {
+    fields: [crmActivities.leadId],
+    references: [crmLeads.id],
+  }),
+  contact: one(crmContacts, {
+    fields: [crmActivities.contactId],
+    references: [crmContacts.id],
+  }),
+  company: one(crmCompanies, {
+    fields: [crmActivities.companyId],
+    references: [crmCompanies.id],
+  }),
+  deal: one(crmDeals, {
+    fields: [crmActivities.dealId],
+    references: [crmDeals.id],
+  }),
+}));
+
+export const crmQuotationsRelations = relations(crmQuotations, ({ one, many }) => ({
+  user: one(users, { fields: [crmQuotations.userId], references: [users.id] }),
+  company: one(crmCompanies, {
+    fields: [crmQuotations.companyId],
+    references: [crmCompanies.id],
+  }),
+  contact: one(crmContacts, {
+    fields: [crmQuotations.contactId],
+    references: [crmContacts.id],
+  }),
+  lead: one(crmLeads, {
+    fields: [crmQuotations.leadId],
+    references: [crmLeads.id],
+  }),
+  deal: one(crmDeals, {
+    fields: [crmQuotations.dealId],
+    references: [crmDeals.id],
+  }),
+  approvedByUser: one(users, {
+    fields: [crmQuotations.approvedBy],
+    references: [users.id],
+  }),
+  parent: one(crmQuotations, {
+    fields: [crmQuotations.parentQuotationId],
+    references: [crmQuotations.id],
+  }),
+  items: many(crmQuotationItems),
+}));
+
+export const crmQuotationItemsRelations = relations(crmQuotationItems, ({ one }) => ({
+  quotation: one(crmQuotations, {
+    fields: [crmQuotationItems.quotationId],
+    references: [crmQuotations.id],
+  }),
+}));
+
+export const crmAiInsightsRelations = relations(crmAiInsights, ({ one }) => ({
+  user: one(users, { fields: [crmAiInsights.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [crmAiInsights.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 // Payment engine relations
 export const paymentProviderConfigsRelations = relations(paymentProviderConfigs, ({ one }) => ({
   organization: one(organizations, {
@@ -2165,6 +2726,27 @@ export type AiBusinessHealth = typeof aiBusinessHealth.$inferSelect;
 
 // Business Timeline types
 export type BusinessTimeline = typeof businessTimeline.$inferSelect;
+
+// Enterprise CRM types
+export type CrmCompany = typeof crmCompanies.$inferSelect;
+export type CrmContact = typeof crmContacts.$inferSelect;
+export type CrmLead = typeof crmLeads.$inferSelect;
+export type CrmPipelineStage = typeof crmPipelineStages.$inferSelect;
+export type CrmDeal = typeof crmDeals.$inferSelect;
+export type CrmActivity = typeof crmActivities.$inferSelect;
+export type CrmQuotation = typeof crmQuotations.$inferSelect;
+export type CrmQuotationItem = typeof crmQuotationItems.$inferSelect;
+export type CrmAiInsight = typeof crmAiInsights.$inferSelect;
+
+// Enterprise CRM enums (TypeScript unions)
+export type LeadSource = (typeof leadSourceEnum.enumValues)[number];
+export type LeadStatus = (typeof leadStatusEnum.enumValues)[number];
+export type DealStatus = (typeof dealStatusEnum.enumValues)[number];
+export type ActivityType = (typeof activityTypeEnum.enumValues)[number];
+export type ActivityStatus = (typeof activityStatusEnum.enumValues)[number];
+export type QuotationStatus = (typeof quotationStatusEnum.enumValues)[number];
+export type QuotationApprovalStatus =
+  (typeof quotationApprovalStatusEnum.enumValues)[number];
 
 // Onboarding types
 export type OnboardingStep = typeof onboardingSteps.$inferSelect;

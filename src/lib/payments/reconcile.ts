@@ -30,7 +30,7 @@ export async function getUnreconciledPayments(organizationId: string) {
     where: and(eq(payments.organizationId, organizationId), eq(payments.status, "completed")),
     orderBy: (payments, { desc }) => [desc(payments.createdAt)],
     with: { invoice: true },
-  });
+  }) as any[];
 
   return allPayments.filter((p) => {
     if (!p.invoiceId) return true;

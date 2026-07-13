@@ -131,7 +131,7 @@ export async function getActiveOrganization(
 
   if (!member?.organization) return null;
   return {
-    organization: member.organization,
+    organization: member.organization as Organization,
     roleType: member.roleType as SystemRole,
   };
 }

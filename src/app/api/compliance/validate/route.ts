@@ -42,7 +42,7 @@ export async function POST(req: Request) {
           eq(invoices.organizationId, ctx.organizationId)
         ),
         with: { client: true, items: true },
-      });
+      }) as any;
       if (!invoice) {
         return NextResponse.json(
           { error: "Invoice not found" },
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         taxAmount: num(invoice.taxAmount),
         total: num(invoice.total),
         customerName: invoice.client?.name ?? null,
-        items: (invoice.items ?? []).map((it) => ({
+        items: (invoice.items ?? []).map((it: any) => ({
           description: it.description,
           quantity: num(it.quantity),
           unitPrice: num(it.unitPrice),

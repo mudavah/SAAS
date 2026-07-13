@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { invoices, businesses } from "@/db/schema";
+import type { clients, invoiceItems } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateInvoicePdf } from "@/lib/pdf";
 import { buildInvoicePdfPayload } from "@/lib/invoice-pdf-data";
 import { requireApiContext } from "@/lib/session";
+
+type InvoiceWithRelations = typeof invoices.$inferSelect & {
+  client: typeof clients.$inferSelect | null;
+  items: (typeof invoiceItems.$inferSelect)[];
+};
 
 export async function GET(
   req: Request,
@@ -19,7 +25,7 @@ export async function GET(
   const invoice = await db.query.invoices.findFirst({
     where: and(eq(invoices.id, id), eq(invoices.organizationId, ctx.organizationId)),
     with: { client: true, items: true },
-  });
+  }) as InvoiceWithRelations | null;
 
   if (!invoice) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

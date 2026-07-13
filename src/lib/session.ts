@@ -81,7 +81,7 @@ async function loadMembership(userId: string, orgId: string) {
     with: {
       customRole: { with: { permissions: true } },
     },
-  });
+  }) as any;
 }
 
 async function loadOrg(orgId: string) {
