@@ -44,10 +44,10 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))",
         },
         kazi: {
-          green: "#006B3F",
-          blue: "#1E3A8A",
-          orange: "#EA580C",
-          gold: "#F59E0B",
+          green: "rgb(var(--kazi-green) / <alpha-value>)",
+          blue: "rgb(var(--kazi-blue) / <alpha-value>)",
+          orange: "rgb(var(--kazi-orange) / <alpha-value>)",
+          gold: "rgb(var(--kazi-gold) / <alpha-value>)",
         },
       },
       borderRadius: {

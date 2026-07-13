@@ -4,6 +4,9 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { ToastContextProvider } from "@/components/ui/use-toast";
+import { RegisterSW } from "@/components/pwa/register-sw";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
+import type { Viewport } from "next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +34,21 @@ export const metadata: Metadata = {
     "invoice app Africa",
   ],
   authors: [{ name: "KaziFlow" }],
+  manifest: "/manifest.json",
+  applicationName: "KaziFlow",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "KaziFlow",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+  other: {
+    "msapplication-TileColor": "#006B3F",
+    "mobile-web-app-capable": "yes",
+  },
   openGraph: {
     title: "KaziFlow — Business Management for Kenya",
     description:
@@ -40,6 +58,17 @@ export const metadata: Metadata = {
     locale: "en_KE",
     type: "website",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#006B3F" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B3D2E" },
+  ],
 };
 
 export default function RootLayout({
@@ -64,6 +93,8 @@ export default function RootLayout({
             </QueryProvider>
           </AuthProvider>
         </ThemeProvider>
+        <RegisterSW />
+        <InstallPrompt />
       </body>
     </html>
   );

@@ -236,7 +236,7 @@ export default function PaymentsPage() {
                 <form onSubmit={(e) => { e.preventDefault(); handleStkPush(); }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Phone (254...)</Label>
-                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="254708374149" />
+                    <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="254708374149" />
                   </div>
                   <div className="space-y-2">
                     <Label>Amount (KSh)</Label>
