@@ -140,7 +140,19 @@ export type PermissionKey =
   | "analytics.view"
   | "analytics.export"
   | "analytics.dashboards.manage"
-  | "analytics.scheduled_reports.manage";
+  | "analytics.scheduled_reports.manage"
+  | "enterprise.view"
+  | "enterprise.branches.manage"
+  | "enterprise.members.manage"
+  | "enterprise.pricing.manage"
+  | "enterprise.transfers.manage"
+  | "enterprise.sales.manage"
+  | "enterprise.procurement.manage"
+  | "enterprise.reports.view"
+  | "enterprise.approvals.manage"
+  | "enterprise.approvals.approve"
+  | "enterprise.settings.manage"
+  | "enterprise.ai.access";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -305,6 +317,18 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "analytics.export": { key: "analytics.export", category: "analytics", name: "Export Analytics", description: "Export analytics data to PDF, Excel or CSV" },
   "analytics.dashboards.manage": { key: "analytics.dashboards.manage", category: "analytics", name: "Manage Dashboards", description: "Create, edit and delete custom analytics dashboards" },
   "analytics.scheduled_reports.manage": { key: "analytics.scheduled_reports.manage", category: "analytics", name: "Manage Scheduled Reports", description: "Create and manage scheduled analytics reports" },
+  "enterprise.view": { key: "enterprise.view", category: "enterprise", name: "View Enterprise", description: "View enterprise dashboard and branch overview" },
+  "enterprise.branches.manage": { key: "enterprise.branches.manage", category: "enterprise", name: "Manage Branches", description: "Create, edit and manage branches" },
+  "enterprise.members.manage": { key: "enterprise.members.manage", category: "enterprise", name: "Manage Branch Members", description: "Assign users to branches and set branch permissions" },
+  "enterprise.pricing.manage": { key: "enterprise.pricing.manage", category: "enterprise", name: "Manage Branch Pricing", description: "Set branch-specific pricing rules" },
+  "enterprise.transfers.manage": { key: "enterprise.transfers.manage", category: "enterprise", name: "Manage Inter-Branch Transfers", description: "Create and manage inventory transfers between branches" },
+  "enterprise.sales.manage": { key: "enterprise.sales.manage", category: "enterprise", name: "Manage Inter-Branch Sales", description: "Create and manage cross-branch sales orders" },
+  "enterprise.procurement.manage": { key: "enterprise.procurement.manage", category: "enterprise", name: "Manage Centralized Procurement", description: "Oversee organization-wide procurement" },
+  "enterprise.reports.view": { key: "enterprise.reports.view", category: "enterprise", name: "View Enterprise Reports", description: "View consolidated enterprise reporting" },
+  "enterprise.approvals.manage": { key: "enterprise.approvals.manage", category: "enterprise", name: "Manage Branch Approvals", description: "Create and manage branch approval workflows" },
+  "enterprise.approvals.approve": { key: "enterprise.approvals.approve", category: "enterprise", name: "Approve Branch Requests", description: "Approve or reject branch-level requests" },
+  "enterprise.settings.manage": { key: "enterprise.settings.manage", category: "enterprise", name: "Manage Enterprise Settings", description: "Configure enterprise-level organization settings" },
+  "enterprise.ai.access": { key: "enterprise.ai.access", category: "enterprise", name: "Access Enterprise AI", description: "Use AI insights for branch performance and recommendations" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -405,6 +429,21 @@ const ANALYTICS_PERMS: PermissionKey[] = [
   "analytics.scheduled_reports.manage",
 ];
 
+const ENTERPRISE_PERMS: PermissionKey[] = [
+  "enterprise.view",
+  "enterprise.branches.manage",
+  "enterprise.members.manage",
+  "enterprise.pricing.manage",
+  "enterprise.transfers.manage",
+  "enterprise.sales.manage",
+  "enterprise.procurement.manage",
+  "enterprise.reports.view",
+  "enterprise.approvals.manage",
+  "enterprise.approvals.approve",
+  "enterprise.settings.manage",
+  "enterprise.ai.access",
+];
+
 /**
  * System role → permission mapping. Owners get everything. Each lower role is a
  * subset of the higher ones, with role-specific focuses layered on top.
@@ -483,6 +522,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     ...HR_PERMS,
     ...PAYROLL_PERMS,
     ...ANALYTICS_PERMS,
+    ...ENTERPRISE_PERMS,
     "api.keys.manage",
     "api.view",
     "api.analytics.view",

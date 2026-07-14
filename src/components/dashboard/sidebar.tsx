@@ -21,6 +21,7 @@ import { signOut, useSession } from "next-auth/react";
     ShoppingCart,
     BookOpen,
     Shield,
+    Truck,
     Users2,
     Bell,
     FileSearch,
@@ -89,6 +90,38 @@ const navItems = [
   { href: "/dashboard/payroll/portal", label: "My Payslips", icon: UserCircle },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/audit", label: "Audit Logs", icon: FileSearch },
+  {
+    href: "/dashboard/enterprise",
+    label: "Enterprise",
+    icon: Building2,
+  },
+  { href: "/dashboard/enterprise/branches", label: "Branches", icon: GitBranch },
+  { href: "/dashboard/enterprise/transfers", label: "Transfers", icon: Truck },
+  {
+    href: "/dashboard/enterprise/sales",
+    label: "Inter-Branch Sales",
+    icon: Store,
+  },
+  {
+    href: "/dashboard/enterprise/procurement",
+    label: "Central Procurement",
+    icon: ShoppingCart,
+  },
+  {
+    href: "/dashboard/enterprise/reports",
+    label: "Enterprise Reports",
+    icon: BarChart3,
+  },
+  {
+    href: "/dashboard/enterprise/approvals",
+    label: "Branch Approvals",
+    icon: ShieldCheck,
+  },
+  {
+    href: "/dashboard/enterprise/settings",
+    label: "Enterprise Settings",
+    icon: Settings,
+  },
 ];
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {

@@ -128,9 +128,11 @@ export function SimplePieChart({
           cx="50%"
           cy="50%"
           outerRadius={100}
-          label={({ name, percent }: { name: string; percent: number }) =>
-            `${name}: ${(percent * 100).toFixed(0)}%`
-          }
+          label={(labelProps: any) => {
+            const name = labelProps?.name ?? "";
+            const percent = labelProps?.percent ?? 0;
+            return `${name}: ${(percent * 100).toFixed(0)}%`;
+          }}
           labelLine={{ stroke: "#94a3b8" }}
         >
           {data.map((entry, index) => (

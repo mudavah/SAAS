@@ -116,6 +116,41 @@ export const analyticsInsightTypeEnum = pgEnum("analytics_insight_type", [
   "alert",
 ]);
 
+// Enterprise & Multi-Branch Management enums (Epic 10)
+export const branchTypeEnum = pgEnum("branch_type", [
+  "head_office",
+  "retail",
+  "warehouse",
+  "office",
+  "factory",
+  "other",
+]);
+
+export const branchStatusEnum = pgEnum("branch_status", [
+  "active",
+  "inactive",
+  "suspended",
+  "closing",
+]);
+
+export const transferStatusEnum = pgEnum("transfer_status", [
+  "draft",
+  "pending",
+  "in_transit",
+  "received",
+  "completed",
+  "cancelled",
+  "rejected",
+]);
+
+export const interBranchSaleStatusEnum = pgEnum("inter_branch_sale_status", [
+  "draft",
+  "pending",
+  "approved",
+  "completed",
+  "cancelled",
+]);
+
 // Inventory enums
 export const inventoryItemTypeEnum = pgEnum("inventory_item_type", [
   "product",
@@ -490,6 +525,33 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "ai.task.recommended",
   "ai.churn.predicted",
   "ai.nl_query.executed",
+  "enterprise.branch.created",
+  "enterprise.branch.updated",
+  "enterprise.branch.deleted",
+  "enterprise.branch.set_default",
+  "enterprise.branch_member.added",
+  "enterprise.transfer.created",
+  "enterprise.transfer.in_transit",
+  "enterprise.transfer.received",
+  "enterprise.transfer.completed",
+  "enterprise.transfer.cancelled",
+  "enterprise.inter_branch_sale.created",
+  "enterprise.sale.created",
+  "enterprise.sale.approved",
+  "enterprise.sale.completed",
+  "enterprise.inter_branch_sale.approved",
+  "enterprise.inter_branch_sale.completed",
+  "enterprise.inter_branch_sale.cancelled",
+  "enterprise.procurement.created",
+  "enterprise.procurement.approved",
+  "enterprise.procurement.received",
+  "enterprise.branch.approval.requested",
+  "enterprise.branch.approval.approved",
+  "enterprise.branch.approval.rejected",
+  "enterprise.approval_request.created",
+  "enterprise.approval_request.approved",
+  "enterprise.approval_request.rejected",
+  "enterprise.ai.insight.generated",
 ]);
 
 // Onboarding enums
@@ -1811,6 +1873,7 @@ export const permissionCategoryEnum = pgEnum("permission_category", [
   "subscription",
   "crm",
   "payroll",
+  "enterprise",
 ]);
 
 // Audit logging
@@ -1839,6 +1902,7 @@ export const auditCategoryEnum = pgEnum("audit_category", [
   "pos",
   "hr",
   "payroll",
+  "enterprise",
 ]);
 
 // Notifications
@@ -1857,6 +1921,7 @@ export const notificationCategoryEnum = pgEnum("notification_category", [
   "pos",
   "hr",
   "payroll",
+  "enterprise",
 ]);
 
 export const notificationPriorityEnum = pgEnum("notification_priority", [
@@ -3549,6 +3614,371 @@ export const analyticsInsights = pgTable("analytics_insights", {
   typeIdx: index("analytics_insights_type_idx").on(table.type),
   readIdx: index("analytics_insights_read_idx").on(table.isRead),
   createdIdx: index("analytics_insights_created_idx").on(table.createdAt),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE — ENTERPRISE & MULTI-BRANCH MANAGEMENT (Epic 10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Every enterprise table is multi-tenant: it carries `organizationId` and
+// user-scoped ownership. All mutations are gated by RBAC, audited, emit
+// Business Timeline events, and integrate with Inventory, Procurement, POS,
+// HR, Payroll, and the AI Business Copilot.
+
+export const enterpriseBranches = pgTable("enterprise_branches", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  type: branchTypeEnum("type").notNull().default("retail"),
+  status: branchStatusEnum("status").notNull().default("active"),
+  address: text("address"),
+  city: text("city"),
+  country: text("country").default("Kenya"),
+  phone: text("phone"),
+  email: text("email"),
+  managerId: text("manager_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  timezone: text("timezone").default("Africa/Nairobi"),
+  currency: text("currency").default("KES"),
+  taxId: text("tax_id"),
+  settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+  isDefault: boolean("is_default").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("enterprise_branches_org_idx").on(table.organizationId),
+  userIdx: index("enterprise_branches_user_idx").on(table.userId),
+  codeIdx: uniqueIndex("unique_org_branch_code").on(table.organizationId, table.code),
+  managerIdx: index("enterprise_branches_manager_idx").on(table.managerId),
+}));
+
+export const branchMembers = pgTable("branch_members", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  roleType: roleTypeEnum("role_type").notNull().default("employee"),
+  customRoleId: text("custom_role_id").references(() => roles.id, {
+    onDelete: "set null",
+  }),
+  permissions: jsonb("permissions").$type<string[]>().default([]),
+  isPrimary: boolean("is_primary").default(false).notNull(),
+  joinedAt: timestamp("joined_at", { mode: "date" }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("branch_members_org_idx").on(table.organizationId),
+  branchIdx: index("branch_members_branch_idx").on(table.branchId),
+  userIdx: index("branch_members_user_idx").on(table.userId),
+  uniqueUserBranch: uniqueIndex("unique_branch_user").on(table.branchId, table.userId),
+}));
+
+export const branchPricing = pgTable("branch_pricing", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "cascade" }),
+  productId: text("product_id").references(() => inventoryProducts.id, {
+    onDelete: "set null",
+  }),
+  categoryId: text("category_id").references(() => inventoryCategories.id, {
+    onDelete: "set null",
+  }),
+  priceAdjustmentType: text("price_adjustment_type").default("percentage"),
+  priceAdjustmentValue: decimal("price_adjustment_value", { precision: 12, scale: 2 }).default("0"),
+  minPrice: decimal("min_price", { precision: 12, scale: 2 }),
+  maxPrice: decimal("max_price", { precision: 12, scale: 2 }),
+  effectiveFrom: timestamp("effective_from", { mode: "date" }),
+  effectiveTo: timestamp("effective_to", { mode: "date" }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("branch_pricing_org_idx").on(table.organizationId),
+  branchIdx: index("branch_pricing_branch_idx").on(table.branchId),
+  productIdx: index("branch_pricing_product_idx").on(table.productId),
+  uniqueBranchProduct: uniqueIndex("unique_branch_product_pricing").on(table.branchId, table.productId),
+}));
+
+export const branchTaxSettings = pgTable("branch_tax_settings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "cascade" }),
+  taxName: text("tax_name").notNull(),
+  taxType: text("tax_type").notNull(),
+  rate: decimal("rate", { precision: 5, scale: 2 }).notNull(),
+  isCompound: boolean("is_compound").default(false).notNull(),
+  appliesTo: text("applies_to").default("all"),
+  effectiveFrom: timestamp("effective_from", { mode: "date" }),
+  effectiveTo: timestamp("effective_to", { mode: "date" }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("branch_tax_settings_org_idx").on(table.organizationId),
+  branchIdx: index("branch_tax_settings_branch_idx").on(table.branchId),
+}));
+
+export const interBranchTransfers = pgTable("inter_branch_transfers", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  transferNumber: text("transfer_number").notNull(),
+  fromBranchId: text("from_branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "restrict" }),
+  toBranchId: text("to_branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "restrict" }),
+  status: transferStatusEnum("status").notNull().default("draft"),
+  notes: text("notes"),
+  approvedBy: text("approved_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  approvedAt: timestamp("approved_at", { mode: "date" }),
+  receivedBy: text("received_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  receivedAt: timestamp("received_at", { mode: "date" }),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("inter_branch_transfers_org_idx").on(table.organizationId),
+  userIdx: index("inter_branch_transfers_user_idx").on(table.userId),
+  fromIdx: index("inter_branch_transfers_from_idx").on(table.fromBranchId),
+  toIdx: index("inter_branch_transfers_to_idx").on(table.toBranchId),
+  numberIdx: uniqueIndex("unique_org_transfer_number").on(table.organizationId, table.transferNumber),
+  statusIdx: index("inter_branch_transfers_status_idx").on(table.status),
+}));
+
+export const interBranchTransferItems = pgTable("inter_branch_transfer_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  transferId: text("transfer_id")
+    .notNull()
+    .references(() => interBranchTransfers.id, { onDelete: "cascade" }),
+  productId: text("product_id")
+    .notNull()
+    .references(() => inventoryProducts.id, { onDelete: "restrict" }),
+  quantity: decimal("quantity", { precision: 12, scale: 3 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 12, scale: 2 }).notNull(),
+  receivedQuantity: decimal("received_quantity", { precision: 12, scale: 3 }).default("0"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("inter_branch_transfer_items_org_idx").on(table.organizationId),
+  transferIdx: index("inter_branch_transfer_items_transfer_idx").on(table.transferId),
+  productIdx: index("inter_branch_transfer_items_product_idx").on(table.productId),
+}));
+
+export const interBranchSales = pgTable("inter_branch_sales", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  saleNumber: text("sale_number").notNull(),
+  fromBranchId: text("from_branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "restrict" }),
+  toBranchId: text("to_branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "restrict" }),
+  status: interBranchSaleStatusEnum("status").notNull().default("draft"),
+  currency: text("currency").default("KES").notNull(),
+  subtotal: decimal("subtotal", { precision: 14, scale: 2 }).default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+  taxAmount: decimal("tax_amount", { precision: 14, scale: 2 }).default("0"),
+  total: decimal("total", { precision: 14, scale: 2 }).default("0"),
+  notes: text("notes"),
+  approvedBy: text("approved_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  approvedAt: timestamp("approved_at", { mode: "date" }),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  cancelledAt: timestamp("cancelled_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("inter_branch_sales_org_idx").on(table.organizationId),
+  userIdx: index("inter_branch_sales_user_idx").on(table.userId),
+  fromIdx: index("inter_branch_sales_from_idx").on(table.fromBranchId),
+  toIdx: index("inter_branch_sales_to_idx").on(table.toBranchId),
+  numberIdx: uniqueIndex("unique_org_inter_branch_sale_number").on(table.organizationId, table.saleNumber),
+  statusIdx: index("inter_branch_sales_status_idx").on(table.status),
+}));
+
+export const interBranchSaleItems = pgTable("inter_branch_sale_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  saleId: text("sale_id")
+    .notNull()
+    .references(() => interBranchSales.id, { onDelete: "cascade" }),
+  productId: text("product_id")
+    .notNull()
+    .references(() => inventoryProducts.id, { onDelete: "restrict" }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 12, scale: 3 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  discount: decimal("discount", { precision: 12, scale: 2 }).default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default("16"),
+  lineTotal: decimal("line_total", { precision: 14, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("inter_branch_sale_items_org_idx").on(table.organizationId),
+  saleIdx: index("inter_branch_sale_items_sale_idx").on(table.saleId),
+  productIdx: index("inter_branch_sale_items_product_idx").on(table.productId),
+}));
+
+export const branchApprovalWorkflows = pgTable("branch_approval_workflows", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  resourceType: text("resource_type").notNull(),
+  steps: jsonb("steps").$type<Record<string, unknown>[]>().default([]),
+  isDefault: boolean("is_default").default(false).notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("branch_approval_workflows_org_idx").on(table.organizationId),
+  branchIdx: index("branch_approval_workflows_branch_idx").on(table.branchId),
+  resourceIdx: index("branch_approval_workflows_resource_idx").on(table.resourceType),
+}));
+
+export const branchApprovalRequests = pgTable("branch_approval_requests", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "cascade" }),
+  workflowId: text("workflow_id").references(() => branchApprovalWorkflows.id, {
+    onDelete: "set null",
+  }),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  title: text("title").notNull(),
+  status: approvalStatusEnum("status").default("pending").notNull(),
+  currentStep: integer("current_step").default(0).notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("branch_approval_requests_org_idx").on(table.organizationId),
+  branchIdx: index("branch_approval_requests_branch_idx").on(table.branchId),
+  resourceIdx: index("branch_approval_requests_resource_idx").on(table.resourceType, table.resourceId),
+  statusIdx: index("branch_approval_requests_status_idx").on(table.status),
+}));
+
+export const enterpriseSettings = pgTable("enterprise_settings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  consolidatedReporting: boolean("consolidated_reporting").default(true).notNull(),
+  crossBranchInventoryVisibility: boolean("cross_branch_inventory_visibility").default(true).notNull(),
+  centralizedProcurement: boolean("centralized_procurement").default(false).notNull(),
+  branchApprovalRequired: boolean("branch_approval_required").default(false).notNull(),
+  defaultTransferMethod: text("default_transfer_method").default("standard"),
+  autoApproveTransfersBelow: decimal("auto_approve_transfers_below", { precision: 14, scale: 2 }),
+  settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: uniqueIndex("unique_org_enterprise_settings").on(table.organizationId),
+}));
+
+export const branchPerformanceSnapshots = pgTable("branch_performance_snapshots", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => enterpriseBranches.id, { onDelete: "cascade" }),
+  periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+  periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+  revenue: decimal("revenue", { precision: 14, scale: 2 }).default("0"),
+  expenses: decimal("expenses", { precision: 14, scale: 2 }).default("0"),
+  profit: decimal("profit", { precision: 14, scale: 2 }).default("0"),
+  inventoryValue: decimal("inventory_value", { precision: 14, scale: 2 }).default("0"),
+  salesCount: integer("sales_count").default(0),
+  transferCount: integer("transfer_count").default(0),
+  employeeCount: integer("employee_count").default(0),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}),
+  computedAt: timestamp("computed_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("branch_performance_snapshots_org_idx").on(table.organizationId),
+  branchIdx: index("branch_performance_snapshots_branch_idx").on(table.branchId),
+  periodIdx: index("branch_performance_snapshots_period_idx").on(table.periodStart, table.periodEnd),
+  uniqueBranchPeriod: uniqueIndex("unique_branch_period").on(table.branchId, table.periodStart, table.periodEnd),
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6800,6 +7230,158 @@ export const analyticsInsightsRelations = relations(analyticsInsights, ({ one })
   }),
 }));
 
+// ── Enterprise & Multi-Branch Management relations ─────────────────────────────
+
+export const enterpriseBranchesRelations = relations(enterpriseBranches, ({ one, many }) => ({
+  user: one(users, { fields: [enterpriseBranches.userId], references: [users.id] }),
+  manager: one(users, { fields: [enterpriseBranches.managerId], references: [users.id] }),
+  members: many(branchMembers),
+  pricing: many(branchPricing),
+  taxSettings: many(branchTaxSettings),
+  approvalWorkflows: many(branchApprovalWorkflows),
+  approvalRequests: many(branchApprovalRequests),
+  performanceSnapshots: many(branchPerformanceSnapshots),
+}));
+
+export const branchMembersRelations = relations(branchMembers, ({ one }) => ({
+  branch: one(enterpriseBranches, {
+    fields: [branchMembers.branchId],
+    references: [enterpriseBranches.id],
+  }),
+  user: one(users, {
+    fields: [branchMembers.userId],
+    references: [users.id],
+  }),
+  customRole: one(roles, {
+    fields: [branchMembers.customRoleId],
+    references: [roles.id],
+  }),
+}));
+
+export const branchPricingRelations = relations(branchPricing, ({ one }) => ({
+  branch: one(enterpriseBranches, {
+    fields: [branchPricing.branchId],
+    references: [enterpriseBranches.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [branchPricing.productId],
+    references: [inventoryProducts.id],
+  }),
+  category: one(inventoryCategories, {
+    fields: [branchPricing.categoryId],
+    references: [inventoryCategories.id],
+  }),
+}));
+
+export const branchTaxSettingsRelations = relations(branchTaxSettings, ({ one }) => ({
+  branch: one(enterpriseBranches, {
+    fields: [branchTaxSettings.branchId],
+    references: [enterpriseBranches.id],
+  }),
+}));
+
+export const interBranchTransfersRelations = relations(interBranchTransfers, ({ one, many }) => ({
+  user: one(users, { fields: [interBranchTransfers.userId], references: [users.id] }),
+  fromBranch: one(enterpriseBranches, {
+    fields: [interBranchTransfers.fromBranchId],
+    references: [enterpriseBranches.id],
+  }),
+  toBranch: one(enterpriseBranches, {
+    fields: [interBranchTransfers.toBranchId],
+    references: [enterpriseBranches.id],
+  }),
+  approver: one(users, {
+    fields: [interBranchTransfers.approvedBy],
+    references: [users.id],
+  }),
+  receiver: one(users, {
+    fields: [interBranchTransfers.receivedBy],
+    references: [users.id],
+  }),
+  items: many(interBranchTransferItems),
+}));
+
+export const interBranchTransferItemsRelations = relations(interBranchTransferItems, ({ one }) => ({
+  transfer: one(interBranchTransfers, {
+    fields: [interBranchTransferItems.transferId],
+    references: [interBranchTransfers.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [interBranchTransferItems.productId],
+    references: [inventoryProducts.id],
+  }),
+}));
+
+export const interBranchSalesRelations = relations(interBranchSales, ({ one, many }) => ({
+  user: one(users, { fields: [interBranchSales.userId], references: [users.id] }),
+  fromBranch: one(enterpriseBranches, {
+    fields: [interBranchSales.fromBranchId],
+    references: [enterpriseBranches.id],
+  }),
+  toBranch: one(enterpriseBranches, {
+    fields: [interBranchSales.toBranchId],
+    references: [enterpriseBranches.id],
+  }),
+  approver: one(users, {
+    fields: [interBranchSales.approvedBy],
+    references: [users.id],
+  }),
+  items: many(interBranchSaleItems),
+}));
+
+export const interBranchSaleItemsRelations = relations(interBranchSaleItems, ({ one }) => ({
+  sale: one(interBranchSales, {
+    fields: [interBranchSaleItems.saleId],
+    references: [interBranchSales.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [interBranchSaleItems.productId],
+    references: [inventoryProducts.id],
+  }),
+}));
+
+export const branchApprovalWorkflowsRelations = relations(branchApprovalWorkflows, ({ one, many }) => ({
+  user: one(users, { fields: [branchApprovalWorkflows.userId], references: [users.id] }),
+  branch: one(enterpriseBranches, {
+    fields: [branchApprovalWorkflows.branchId],
+    references: [enterpriseBranches.id],
+  }),
+  requests: many(branchApprovalRequests),
+}));
+
+export const branchApprovalRequestsRelations = relations(branchApprovalRequests, ({ one }) => ({
+  branch: one(enterpriseBranches, {
+    fields: [branchApprovalRequests.branchId],
+    references: [enterpriseBranches.id],
+  }),
+  workflow: one(branchApprovalWorkflows, {
+    fields: [branchApprovalRequests.workflowId],
+    references: [branchApprovalWorkflows.id],
+  }),
+  decidedByUser: one(users, {
+    fields: [branchApprovalRequests.decidedBy],
+    references: [users.id],
+  }),
+}));
+
+export const enterpriseSettingsRelations = relations(enterpriseSettings, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [enterpriseSettings.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const branchPerformanceSnapshotsRelations = relations(branchPerformanceSnapshots, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [branchPerformanceSnapshots.organizationId],
+    references: [organizations.id],
+  }),
+  branch: one(enterpriseBranches, {
+    fields: [branchPerformanceSnapshots.branchId],
+    references: [enterpriseBranches.id],
+  }),
+}));
+
 // ── Procurement types ──────────────────────────────────────────────────────────
 export type ProcurementPurchaseRequest =
   typeof procurementPurchaseRequests.$inferSelect;
@@ -6957,3 +7539,23 @@ export type ScheduleFrequency = (typeof scheduleFrequencyEnum.enumValues)[number
 export type ScheduleStatus = (typeof scheduleStatusEnum.enumValues)[number];
 export type ReportStatus = (typeof reportStatusEnum.enumValues)[number];
 export type AnalyticsInsightType = (typeof analyticsInsightTypeEnum.enumValues)[number];
+
+// Enterprise & Multi-Branch Management types
+export type EnterpriseBranch = typeof enterpriseBranches.$inferSelect;
+export type BranchMember = typeof branchMembers.$inferSelect;
+export type BranchPricing = typeof branchPricing.$inferSelect;
+export type BranchTaxSetting = typeof branchTaxSettings.$inferSelect;
+export type InterBranchTransfer = typeof interBranchTransfers.$inferSelect;
+export type InterBranchTransferItem = typeof interBranchTransferItems.$inferSelect;
+export type InterBranchSale = typeof interBranchSales.$inferSelect;
+export type InterBranchSaleItem = typeof interBranchSaleItems.$inferSelect;
+export type BranchApprovalWorkflow = typeof branchApprovalWorkflows.$inferSelect;
+export type BranchApprovalRequest = typeof branchApprovalRequests.$inferSelect;
+export type EnterpriseSetting = typeof enterpriseSettings.$inferSelect;
+export type BranchPerformanceSnapshot = typeof branchPerformanceSnapshots.$inferSelect;
+
+// Enterprise & Multi-Branch Management enums (TypeScript unions)
+export type BranchType = (typeof branchTypeEnum.enumValues)[number];
+export type BranchStatus = (typeof branchStatusEnum.enumValues)[number];
+export type TransferStatus = (typeof transferStatusEnum.enumValues)[number];
+export type InterBranchSaleStatus = (typeof interBranchSaleStatusEnum.enumValues)[number];
