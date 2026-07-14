@@ -941,3 +941,77 @@ export type OffboardingInput = z.infer<typeof offboardingSchema>;
 export type DocumentInput = z.infer<typeof documentSchema>;
 export type AiInsightInput = z.infer<typeof aiInsightSchema>;
 export type AiReminderInput = z.infer<typeof aiReminderSchema>;
+
+// ── Payroll (Epic 6) ────────────────────────────────────────────────────────────
+
+const payrollPeriodStatusValues = ["open", "processing", "closed", "locked"] as const;
+const payrollRunStatusValues = ["draft", "calculated", "pending_approval", "approved", "rejected", "paid", "cancelled"] as const;
+const payslipStatusValues = ["draft", "generated", "sent", "viewed"] as const;
+const payrollItemTypeValues = ["earnings", "allowance", "deduction", "tax_paye", "tax_nssf", "tax_nhif", "tax_pension", "tax_housing_levy", "overtime", "bonus"] as const;
+const salaryStructureTypeValues = ["monthly", "bi_weekly", "weekly", "daily", "contract"] as const;
+
+export const payrollPeriodSchema = z.object({
+  name: z.string().min(1, "Period name is required"),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  isLocked: z.boolean().default(false),
+});
+
+export const salaryStructureSchema = z.object({
+  name: z.string().min(1, "Structure name is required"),
+  description: z.string().optional(),
+  type: z.enum(salaryStructureTypeValues).default("monthly"),
+  isActive: z.boolean().default(true),
+});
+
+export const salaryStructureComponentSchema = z.object({
+  salaryStructureId: z.string().min(1, "Salary structure is required"),
+  name: z.string().min(1, "Component name is required"),
+  type: z.enum(payrollItemTypeValues),
+  amount: z.coerce.number().min(0, "Amount must be 0 or more"),
+  isPercentage: z.boolean().default(false),
+  isRecurring: z.boolean().default(true),
+  isTaxable: z.boolean().default(true),
+  isStatutory: z.boolean().default(false),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+});
+
+export const employeeSalaryAssignmentSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  salaryStructureId: z.string().min(1, "Salary structure is required"),
+  effectiveDate: z.coerce.date(),
+  endDate: z.coerce.date().optional(),
+  basicSalary: z.coerce.number().min(0, "Basic salary must be 0 or more"),
+  currency: z.string().default("KES"),
+});
+
+export const payrollRunSchema = z.object({
+  payrollPeriodId: z.string().min(1, "Payroll period is required"),
+  notes: z.string().optional(),
+});
+
+export const payrollApprovalSchema = z.object({
+  action: z.enum(["approve", "reject"]),
+  comment: z.string().optional(),
+});
+
+export const payrollPaymentExportSchema = z.object({
+  format: z.enum(["csv", "xlsx", "pdf"]).default("csv"),
+});
+
+export const payrollAiInsightSchema = z.object({
+  type: z.string().min(1, "Insight type is required"),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  priority: z.enum(["low", "normal", "high"]).default("normal"),
+  data: z.record(z.any()).optional(),
+});
+
+export type PayrollPeriodInput = z.infer<typeof payrollPeriodSchema>;
+export type SalaryStructureInput = z.infer<typeof salaryStructureSchema>;
+export type SalaryStructureComponentInput = z.infer<typeof salaryStructureComponentSchema>;
+export type EmployeeSalaryAssignmentInput = z.infer<typeof employeeSalaryAssignmentSchema>;
+export type PayrollRunInput = z.infer<typeof payrollRunSchema>;
+export type PayrollApprovalInput = z.infer<typeof payrollApprovalSchema>;
+export type PayrollPaymentExportInput = z.infer<typeof payrollPaymentExportSchema>;
+export type PayrollAiInsightInput = z.infer<typeof payrollAiInsightSchema>;

@@ -29,6 +29,10 @@ import { signOut, useSession } from "next-auth/react";
     Activity,
     Store,
     Building2,
+    CalendarDays,
+    Layers,
+    PlayCircle,
+    UserCircle,
   } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -60,6 +64,13 @@ const navItems = [
   { href: "/dashboard/hr", label: "HR", icon: Users },
   { href: "/dashboard/hr/employees", label: "Employees", icon: Users },
   { href: "/dashboard/hr/departments", label: "Departments", icon: Building2 },
+  { href: "/dashboard/payroll", label: "Payroll", icon: Wallet },
+  { href: "/dashboard/payroll/periods", label: "Periods", icon: CalendarDays },
+  { href: "/dashboard/payroll/structures", label: "Salary Structures", icon: Layers },
+  { href: "/dashboard/payroll/runs", label: "Payroll Runs", icon: PlayCircle },
+  { href: "/dashboard/payroll/payslips", label: "Payslips", icon: FileText },
+  { href: "/dashboard/payroll/reports", label: "Payroll Reports", icon: BarChart3 },
+  { href: "/dashboard/payroll/portal", label: "My Payslips", icon: UserCircle },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/audit", label: "Audit Logs", icon: FileSearch },
 ];

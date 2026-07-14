@@ -402,6 +402,24 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "hr.training.completed",
   "hr.contract.created",
   "hr.contract.expired",
+  "payroll.period.created",
+  "payroll.period.updated",
+  "payroll.period.closed",
+  "payroll.period.locked",
+  "payroll.salary_structure.created",
+  "payroll.salary_structure.updated",
+  "payroll.assignment.created",
+  "payroll.run.created",
+  "payroll.run.processed",
+  "payroll.run.approved",
+  "payroll.run.rejected",
+  "payroll.run.paid",
+  "payroll.run.cancelled",
+  "payroll.payslip.generated",
+  "payroll.payslip.sent",
+  "payroll.payment.exported",
+  "payroll.journal.posted",
+  "payroll.insight.generated",
 ]);
 
 // Onboarding enums
@@ -1266,6 +1284,7 @@ export const permissionCategoryEnum = pgEnum("permission_category", [
   "settings",
   "subscription",
   "crm",
+  "payroll",
 ]);
 
 // Audit logging
@@ -1293,6 +1312,7 @@ export const auditCategoryEnum = pgEnum("audit_category", [
   "crm",
   "pos",
   "hr",
+  "payroll",
 ]);
 
 // Notifications
@@ -1310,6 +1330,7 @@ export const notificationCategoryEnum = pgEnum("notification_category", [
   "crm",
   "pos",
   "hr",
+  "payroll",
 ]);
 
 export const notificationPriorityEnum = pgEnum("notification_priority", [
@@ -4002,6 +4023,61 @@ export const aiHrInsightTypeEnum = pgEnum("ai_hr_insight_type", [
   "headcount_forecast",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Payroll enums (Epic 6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const payrollPeriodStatusEnum = pgEnum("payroll_period_status", [
+  "open",
+  "processing",
+  "closed",
+  "locked",
+]);
+
+export const payrollRunStatusEnum = pgEnum("payroll_run_status", [
+  "draft",
+  "calculated",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "paid",
+  "cancelled",
+]);
+
+export const payslipStatusEnum = pgEnum("payslip_status", [
+  "draft",
+  "generated",
+  "sent",
+  "viewed",
+]);
+
+export const payrollItemTypeEnum = pgEnum("payroll_item_type", [
+  "earnings",
+  "allowance",
+  "deduction",
+  "tax_paye",
+  "tax_nssf",
+  "tax_nhif",
+  "tax_pension",
+  "tax_housing_levy",
+  "overtime",
+  "bonus",
+]);
+
+export const salaryStructureTypeEnum = pgEnum("salary_structure_type", [
+  "monthly",
+  "bi_weekly",
+  "weekly",
+  "daily",
+  "contract",
+]);
+
+export const pensionProviderTypeEnum = pgEnum("pension_provider_type", [
+  "nssf",
+  "private_provider",
+  "corporate_scheme",
+]);
+
 // Departments
 export const hrDepartments = pgTable("hr_departments", {
   id: text("id")
@@ -4819,6 +4895,431 @@ export const hrAiRemindersRelations = relations(hrAiReminders, ({ one }) => ({
   }),
 }));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE — PAYROLL (Epic 6)
+// ─────────────────────────────────────────────────────────────────────────────
+// Every payroll table is multi-tenant: it carries `organizationId` and user-scoped
+// ownership. Cross-references to employees/salary-structures are scoped so a
+// tenant can never read or mutate another tenant's payroll data. All mutations are
+// gated by RBAC, audited, and emit Business Timeline events.
+
+// Payroll Periods
+export const payrollPeriods = pgTable("payroll_periods", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }).notNull(),
+  status: payrollPeriodStatusEnum("status").notNull().default("open"),
+  isLocked: boolean("is_locked").default(false).notNull(),
+  closedAt: timestamp("closed_at", { mode: "date" }),
+  closedBy: text("closed_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("payroll_periods_org_idx").on(table.organizationId),
+  userIdx: index("payroll_periods_user_idx").on(table.userId),
+  statusIdx: index("payroll_periods_status_idx").on(table.status),
+  dateIdx: index("payroll_periods_date_idx").on(table.startDate, table.endDate),
+}));
+
+// Salary Structures
+export const salaryStructures = pgTable("salary_structures", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: salaryStructureTypeEnum("type").notNull().default("monthly"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("salary_structures_org_idx").on(table.organizationId),
+  userIdx: index("salary_structures_user_idx").on(table.userId),
+  nameIdx: uniqueIndex("unique_org_structure_name").on(table.organizationId, table.name),
+}));
+
+// Salary Structure Components (allowances & deductions)
+export const salaryStructureComponents = pgTable("salary_structure_components", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  salaryStructureId: text("salary_structure_id")
+    .notNull()
+    .references(() => salaryStructures.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: payrollItemTypeEnum("type").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  isPercentage: boolean("is_percentage").default(false).notNull(),
+  isRecurring: boolean("is_recurring").default(true).notNull(),
+  isTaxable: boolean("is_taxable").default(true).notNull(),
+  isStatutory: boolean("is_statutory").default(false).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  structureIdx: index("salary_structure_components_structure_idx").on(table.salaryStructureId),
+  orgIdx: index("salary_structure_components_org_idx").on(table.organizationId),
+}));
+
+// Employee Salary Assignments
+export const employeeSalaryAssignments = pgTable("employee_salary_assignments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  salaryStructureId: text("salary_structure_id")
+    .notNull()
+    .references(() => salaryStructures.id, { onDelete: "cascade" }),
+  effectiveDate: timestamp("effective_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }),
+  basicSalary: decimal("basic_salary", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").default("KES").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("employee_salary_assignments_org_idx").on(table.organizationId),
+  employeeIdx: index("employee_salary_assignments_employee_idx").on(table.employeeId),
+  structureIdx: index("employee_salary_assignments_structure_idx").on(table.salaryStructureId),
+  dateIdx: index("employee_salary_assignments_date_idx").on(table.effectiveDate, table.endDate),
+}));
+
+// Payroll Runs
+export const payrollRuns = pgTable("payroll_runs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payrollPeriodId: text("payroll_period_id")
+    .notNull()
+    .references(() => payrollPeriods.id, { onDelete: "cascade" }),
+  runNumber: text("run_number").notNull(),
+  status: payrollRunStatusEnum("status").notNull().default("draft"),
+  totalEmployees: integer("total_employees").default(0).notNull(),
+  totalGross: decimal("total_gross", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalDeductions: decimal("total_deductions", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalNet: decimal("total_net", { precision: 12, scale: 2 }).default("0").notNull(),
+  notes: text("notes"),
+  processedAt: timestamp("processed_at", { mode: "date" }),
+  approvedBy: text("approved_by").references(() => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at", { mode: "date" }),
+  paidAt: timestamp("paid_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("payroll_runs_org_idx").on(table.organizationId),
+  userIdx: index("payroll_runs_user_idx").on(table.userId),
+  periodIdx: index("payroll_runs_period_idx").on(table.payrollPeriodId),
+  statusIdx: index("payroll_runs_status_idx").on(table.status),
+  runNumberIdx: uniqueIndex("unique_org_run_number").on(table.organizationId, table.runNumber),
+}));
+
+// Payroll Run Employees (employee-level summary for each run)
+export const payrollRunEmployees = pgTable("payroll_run_employees", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payrollRunId: text("payroll_run_id")
+    .notNull()
+    .references(() => payrollRuns.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  basicSalary: decimal("basic_salary", { precision: 12, scale: 2 }).notNull(),
+  grossEarnings: decimal("gross_earnings", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalAllowances: decimal("total_allowances", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalDeductions: decimal("total_deductions", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalTax: decimal("total_tax", { precision: 12, scale: 2 }).notNull().default("0"),
+  netPay: decimal("net_pay", { precision: 12, scale: 2 }).notNull().default("0"),
+  paymentMethod: text("payment_method").default("bank_transfer"),
+  paymentReference: text("payment_reference"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  runIdx: index("payroll_run_employees_run_idx").on(table.payrollRunId),
+  employeeIdx: index("payroll_run_employees_employee_idx").on(table.employeeId),
+  orgIdx: index("payroll_run_employees_org_idx").on(table.organizationId),
+}));
+
+// Payroll Run Details (line items for each employee)
+export const payrollRunDetails = pgTable("payroll_run_details", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payrollRunEmployeeId: text("payroll_run_employee_id")
+    .notNull()
+    .references(() => payrollRunEmployees.id, { onDelete: "cascade" }),
+  itemType: payrollItemTypeEnum("item_type").notNull(),
+  name: text("name").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  isPercentage: boolean("is_percentage").default(false).notNull(),
+  baseAmount: decimal("base_amount", { precision: 12, scale: 2 }),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  runEmployeeIdx: index("payroll_run_details_run_employee_idx").on(table.payrollRunEmployeeId),
+  orgIdx: index("payroll_run_details_org_idx").on(table.organizationId),
+}));
+
+// Payslips
+export const payslips = pgTable("payslips", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payrollRunEmployeeId: text("payroll_run_employee_id")
+    .notNull()
+    .references(() => payrollRunEmployees.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  payslipNumber: text("payslip_number").notNull(),
+  status: payslipStatusEnum("status").notNull().default("draft"),
+  periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+  periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+  basicSalary: decimal("basic_salary", { precision: 12, scale: 2 }).notNull(),
+  grossEarnings: decimal("gross_earnings", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalAllowances: decimal("total_allowances", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalDeductions: decimal("total_deductions", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalTax: decimal("total_tax", { precision: 12, scale: 2 }).notNull().default("0"),
+  netPay: decimal("net_pay", { precision: 12, scale: 2 }).notNull().default("0"),
+  paymentMethod: text("payment_method").default("bank_transfer"),
+  paymentReference: text("payment_reference"),
+  sentAt: timestamp("sent_at", { mode: "date" }),
+  viewedAt: timestamp("viewed_at", { mode: "date" }),
+  pdfUrl: text("pdf_url"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("payslips_org_idx").on(table.organizationId),
+  userIdx: index("payslips_user_idx").on(table.userId),
+  employeeIdx: index("payslips_employee_idx").on(table.employeeId),
+  periodIdx: index("payslips_period_idx").on(table.periodStart, table.periodEnd),
+  numberIdx: uniqueIndex("unique_org_payslip_number").on(table.organizationId, table.payslipNumber),
+}));
+
+// Payroll Payment Exports (bank file exports)
+export const payrollPaymentExports = pgTable("payroll_payment_exports", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payrollRunId: text("payroll_run_id")
+    .notNull()
+    .references(() => payrollRuns.id, { onDelete: "cascade" }),
+  exportNumber: text("export_number").notNull(),
+  format: text("format").notNull().default("csv"),
+  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
+  employeeCount: integer("employee_count").notNull(),
+  fileUrl: text("file_url"),
+  generatedAt: timestamp("generated_at", { mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("payroll_payment_exports_org_idx").on(table.organizationId),
+  runIdx: index("payroll_payment_exports_run_idx").on(table.payrollRunId),
+  exportNumberIdx: uniqueIndex("unique_org_export_number").on(table.organizationId, table.exportNumber),
+}));
+
+// Payroll Approval Workflow
+export const payrollApprovalWorkflows = pgTable("payroll_approval_workflows", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  payrollRunId: text("payroll_run_id")
+    .notNull()
+    .references(() => payrollRuns.id, { onDelete: "cascade" }),
+  approverId: text("approver_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  comment: text("comment"),
+  actedAt: timestamp("acted_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  runIdx: index("payroll_approval_workflows_run_idx").on(table.payrollRunId),
+  approverIdx: index("payroll_approval_workflows_approver_idx").on(table.approverId),
+  orgIdx: index("payroll_approval_workflows_org_idx").on(table.organizationId),
+}));
+
+// AI Payroll Insights
+export const payrollAiInsights = pgTable("payroll_ai_insights", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  priority: text("priority").default("normal").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}),
+  read: boolean("read").default(false).notNull(),
+  dismissed: boolean("dismissed").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("payroll_ai_insights_org_idx").on(table.organizationId),
+  userIdx: index("payroll_ai_insights_user_idx").on(table.userId),
+}));
+
+// ── Payroll relations ──────────────────────────────────────────────────────────
+
+export const payrollPeriodsRelations = relations(payrollPeriods, ({ one, many }) => ({
+  user: one(users, { fields: [payrollPeriods.userId], references: [users.id] }),
+  runs: many(payrollRuns),
+}));
+
+export const salaryStructuresRelations = relations(salaryStructures, ({ one, many }) => ({
+  user: one(users, { fields: [salaryStructures.userId], references: [users.id] }),
+  components: many(salaryStructureComponents),
+  assignments: many(employeeSalaryAssignments),
+}));
+
+export const salaryStructureComponentsRelations = relations(salaryStructureComponents, ({ one }) => ({
+  structure: one(salaryStructures, {
+    fields: [salaryStructureComponents.salaryStructureId],
+    references: [salaryStructures.id],
+  }),
+}));
+
+export const employeeSalaryAssignmentsRelations = relations(employeeSalaryAssignments, ({ one }) => ({
+  user: one(users, { fields: [employeeSalaryAssignments.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [employeeSalaryAssignments.employeeId],
+    references: [hrEmployees.id],
+  }),
+  structure: one(salaryStructures, {
+    fields: [employeeSalaryAssignments.salaryStructureId],
+    references: [salaryStructures.id],
+  }),
+}));
+
+export const payrollRunsRelations = relations(payrollRuns, ({ one, many }) => ({
+  user: one(users, { fields: [payrollRuns.userId], references: [users.id] }),
+  period: one(payrollPeriods, {
+    fields: [payrollRuns.payrollPeriodId],
+    references: [payrollPeriods.id],
+  }),
+  employees: many(payrollRunEmployees),
+  approvals: many(payrollApprovalWorkflows),
+  exports: many(payrollPaymentExports),
+}));
+
+export const payrollRunEmployeesRelations = relations(payrollRunEmployees, ({ one, many }) => ({
+  run: one(payrollRuns, {
+    fields: [payrollRunEmployees.payrollRunId],
+    references: [payrollRuns.id],
+  }),
+  employee: one(hrEmployees, {
+    fields: [payrollRunEmployees.employeeId],
+    references: [hrEmployees.id],
+  }),
+  details: many(payrollRunDetails),
+  payslips: many(payslips),
+}));
+
+export const payrollRunDetailsRelations = relations(payrollRunDetails, ({ one }) => ({
+  runEmployee: one(payrollRunEmployees, {
+    fields: [payrollRunDetails.payrollRunEmployeeId],
+    references: [payrollRunEmployees.id],
+  }),
+}));
+
+export const payslipsRelations = relations(payslips, ({ one }) => ({
+  user: one(users, { fields: [payslips.userId], references: [users.id] }),
+  runEmployee: one(payrollRunEmployees, {
+    fields: [payslips.payrollRunEmployeeId],
+    references: [payrollRunEmployees.id],
+  }),
+  employee: one(hrEmployees, {
+    fields: [payslips.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const payrollPaymentExportsRelations = relations(payrollPaymentExports, ({ one }) => ({
+  user: one(users, { fields: [payrollPaymentExports.userId], references: [users.id] }),
+  run: one(payrollRuns, {
+    fields: [payrollPaymentExports.payrollRunId],
+    references: [payrollRuns.id],
+  }),
+}));
+
+export const payrollApprovalWorkflowsRelations = relations(payrollApprovalWorkflows, ({ one }) => ({
+  user: one(users, { fields: [payrollApprovalWorkflows.userId], references: [users.id] }),
+  run: one(payrollRuns, {
+    fields: [payrollApprovalWorkflows.payrollRunId],
+    references: [payrollRuns.id],
+  }),
+  approver: one(users, {
+    fields: [payrollApprovalWorkflows.approverId],
+    references: [users.id],
+  }),
+}));
+
+export const payrollAiInsightsRelations = relations(payrollAiInsights, ({ one }) => ({
+  user: one(users, { fields: [payrollAiInsights.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [payrollAiInsights.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 // ── Procurement relations ──────────────────────────────────────────────────────
 
 export const procurementPurchaseRequestsRelations = relations(
@@ -5329,3 +5830,24 @@ export type TrainingStatus = (typeof trainingStatusEnum.enumValues)[number];
 export type DocumentType = (typeof documentTypeEnum.enumValues)[number];
 export type OrgChartNodeType = (typeof orgChartNodeTypeEnum.enumValues)[number];
 export type AiHrInsightType = (typeof aiHrInsightTypeEnum.enumValues)[number];
+
+// ── Payroll types ───────────────────────────────────────────────────────────────
+export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
+export type SalaryStructure = typeof salaryStructures.$inferSelect;
+export type SalaryStructureComponent = typeof salaryStructureComponents.$inferSelect;
+export type EmployeeSalaryAssignment = typeof employeeSalaryAssignments.$inferSelect;
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+export type PayrollRunEmployee = typeof payrollRunEmployees.$inferSelect;
+export type PayrollRunDetail = typeof payrollRunDetails.$inferSelect;
+export type Payslip = typeof payslips.$inferSelect;
+export type PayrollPaymentExport = typeof payrollPaymentExports.$inferSelect;
+export type PayrollApprovalWorkflow = typeof payrollApprovalWorkflows.$inferSelect;
+export type PayrollAiInsight = typeof payrollAiInsights.$inferSelect;
+
+// Payroll enums (TypeScript unions)
+export type PayrollPeriodStatus = (typeof payrollPeriodStatusEnum.enumValues)[number];
+export type PayrollRunStatus = (typeof payrollRunStatusEnum.enumValues)[number];
+export type PayslipStatus = (typeof payslipStatusEnum.enumValues)[number];
+export type PayrollItemType = (typeof payrollItemTypeEnum.enumValues)[number];
+export type SalaryStructureType = (typeof salaryStructureTypeEnum.enumValues)[number];
+export type PensionProviderType = (typeof pensionProviderTypeEnum.enumValues)[number];

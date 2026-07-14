@@ -114,7 +114,17 @@ export type PermissionKey =
   | "hr.training.manage"
   | "hr.documents.manage"
   | "hr.reports.view"
-  | "hr.ai.access";
+  | "hr.ai.access"
+  | "payroll.view"
+  | "payroll.periods.manage"
+  | "payroll.salary_structures.manage"
+  | "payroll.runs.manage"
+  | "payroll.runs.approve"
+  | "payroll.payslips.view"
+  | "payroll.payslips.manage"
+  | "payroll.reports.view"
+  | "payroll.export"
+  | "payroll.settings.manage";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -252,6 +262,17 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "hr.documents.manage": { key: "hr.documents.manage", category: "hr", name: "Manage Documents", description: "Manage employee documents and files" },
   "hr.reports.view": { key: "hr.reports.view", category: "hr", name: "View HR Reports", description: "View HR analytics and reports" },
   "hr.ai.access": { key: "hr.ai.access", category: "hr", name: "Access HR AI", description: "Use AI HR insights and reminders" },
+
+  "payroll.view": { key: "payroll.view", category: "payroll", name: "View Payroll", description: "View payroll dashboard and records" },
+  "payroll.periods.manage": { key: "payroll.periods.manage", category: "payroll", name: "Manage Payroll Periods", description: "Create and manage payroll periods" },
+  "payroll.salary_structures.manage": { key: "payroll.salary_structures.manage", category: "payroll", name: "Manage Salary Structures", description: "Create and manage salary structures and components" },
+  "payroll.runs.manage": { key: "payroll.runs.manage", category: "payroll", name: "Manage Payroll Runs", description: "Create, process and manage payroll runs" },
+  "payroll.runs.approve": { key: "payroll.runs.approve", category: "payroll", name: "Approve Payroll Runs", description: "Approve or reject payroll runs" },
+  "payroll.payslips.view": { key: "payroll.payslips.view", category: "payroll", name: "View Payslips", description: "View employee payslips" },
+  "payroll.payslips.manage": { key: "payroll.payslips.manage", category: "payroll", name: "Manage Payslips", description: "Generate and send payslips" },
+  "payroll.reports.view": { key: "payroll.reports.view", category: "payroll", name: "View Payroll Reports", description: "View payroll analytics and reports" },
+  "payroll.export": { key: "payroll.export", category: "payroll", name: "Export Payroll", description: "Export payroll data and bank files" },
+  "payroll.settings.manage": { key: "payroll.settings.manage", category: "payroll", name: "Manage Payroll Settings", description: "Configure statutory rates and payroll defaults" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -324,6 +345,25 @@ const HR_PERMS: PermissionKey[] = [
 const HR_VIEW_PERMS: PermissionKey[] = [
   "hr.view",
   "hr.reports.view",
+];
+
+const PAYROLL_PERMS: PermissionKey[] = [
+  "payroll.view",
+  "payroll.periods.manage",
+  "payroll.salary_structures.manage",
+  "payroll.runs.manage",
+  "payroll.runs.approve",
+  "payroll.payslips.view",
+  "payroll.payslips.manage",
+  "payroll.reports.view",
+  "payroll.export",
+  "payroll.settings.manage",
+];
+
+const PAYROLL_VIEW_PERMS: PermissionKey[] = [
+  "payroll.view",
+  "payroll.payslips.view",
+  "payroll.reports.view",
 ];
 
 /**
@@ -402,6 +442,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "pos.shift.manage",
     "pos.settings.manage",
     ...HR_PERMS,
+    ...PAYROLL_PERMS,
   ],
 
   accountant: [
@@ -446,6 +487,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "timeline.view",
     "notifications.manage",
     ...TASK_PERMS,
+    ...PAYROLL_PERMS,
   ],
 
   inventory_manager: [
@@ -552,6 +594,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "tasks.edit",
     "hr.view",
     "hr.ai.access",
+    ...PAYROLL_VIEW_PERMS,
   ],
 
   viewer: [
@@ -571,6 +614,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "timeline.view",
     "tasks.view",
     ...HR_VIEW_PERMS,
+    ...PAYROLL_VIEW_PERMS,
   ],
 };
 
