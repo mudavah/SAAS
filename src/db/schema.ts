@@ -165,6 +165,35 @@ export const recommendationStatusEnum = pgEnum("recommendation_status", [
   "applied",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Point of Sale (POS) enums (Epic 4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const posOrderStatusEnum = pgEnum("pos_order_status", [
+  "draft",
+  "completed",
+  "cancelled",
+  "refunded",
+]);
+export const posPaymentStatusEnum = pgEnum("pos_payment_status", [
+  "pending",
+  "completed",
+  "failed",
+  "refunded",
+]);
+export const posSessionStatusEnum = pgEnum("pos_session_status", [
+  "open",
+  "closed",
+  "suspended",
+]);
+export const posReturnReasonEnum = pgEnum("pos_return_reason", [
+  "damaged",
+  "wrong_item",
+  "customer_request",
+  "expired",
+  "other",
+]);
+
 // Bookkeeping enums
 export const accountTypeEnum = pgEnum("account_type", [
   "asset",
@@ -342,6 +371,13 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "procurement.payment.made",
   "procurement.budget.exceeded",
   "procurement.recommendation.created",
+  "pos.sale.created",
+  "pos.sale.completed",
+  "pos.sale.cancelled",
+  "pos.sale.refunded",
+  "pos.shift.opened",
+  "pos.shift.closed",
+  "pos.payment.received",
 ]);
 
 // Onboarding enums
@@ -567,6 +603,205 @@ export const businessTimeline = pgTable("business_timeline", {
   userIdx: index("business_timeline_user_idx").on(table.userId),
   eventTypeIdx: index("business_timeline_event_type_idx").on(table.eventType),
   createdIdx: index("business_timeline_created_idx").on(table.createdAt),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE — POINT OF SALE (POS) (Epic 4)
+// ─────────────────────────────────────────────────────────────────────────────
+// Every POS table is multi-tenant: it carries `organizationId` and user-scoped
+// ownership. Cross-references to products/clients/invoices are scoped so a
+// tenant can never read or mutate another tenant's POS data. All mutations are
+// gated by RBAC, audited, and emit Business Timeline events.
+
+export const posSessions = pgTable("pos_sessions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  terminalName: text("terminal_name").default("Default Terminal"),
+  status: posSessionStatusEnum("status").notNull().default("open"),
+  openingFloat: decimal("opening_float", { precision: 12, scale: 2 }).notNull().default("0"),
+  closingFloat: decimal("closing_float", { precision: 12, scale: 2 }),
+  cashDeposited: decimal("cash_deposited", { precision: 12, scale: 2 }),
+  notes: text("notes"),
+  openedAt: timestamp("opened_at", { mode: "date" }).defaultNow().notNull(),
+  closedAt: timestamp("closed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("pos_sessions_org_idx").on(table.organizationId),
+  userIdx: index("pos_sessions_user_idx").on(table.userId),
+  statusIdx: index("pos_sessions_status_idx").on(table.status),
+  createdIdx: index("pos_sessions_created_idx").on(table.createdAt),
+}));
+
+export const posOrders = pgTable("pos_orders", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  sessionId: text("session_id").references(() => posSessions.id, {
+    onDelete: "set null",
+  }),
+  clientId: text("client_id").references(() => clients.id, {
+    onDelete: "set null",
+  }),
+  warehouseId: text("warehouse_id").references(() => inventoryWarehouses.id, {
+    onDelete: "set null",
+  }),
+  orderNumber: text("order_number").notNull(),
+  status: posOrderStatusEnum("status").notNull().default("draft"),
+  currency: text("currency").notNull().default("KES"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull().default("16"),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  discount: decimal("discount", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  amountPaid: decimal("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
+  changeDue: decimal("change_due", { precision: 12, scale: 2 }).notNull().default("0"),
+  paymentMethod: text("payment_method"),
+  paymentStatus: posPaymentStatusEnum("payment_status").notNull().default("pending"),
+  notes: text("notes"),
+  invoiceId: text("invoice_id").references(() => invoices.id, {
+    onDelete: "set null",
+  }),
+  etimsStatus: etimsStatusEnum("etims_status").default("pending"),
+  etimsInvoiceNumber: text("etims_invoice_number"),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  cancelledAt: timestamp("cancelled_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("pos_orders_org_idx").on(table.organizationId),
+  userIdx: index("pos_orders_user_idx").on(table.userId),
+  sessionIdx: index("pos_orders_session_idx").on(table.sessionId),
+  orderNumberIdx: uniqueIndex("pos_orders_order_number_idx").on(table.orderNumber, table.organizationId),
+  statusIdx: index("pos_orders_status_idx").on(table.status),
+  createdIdx: index("pos_orders_created_idx").on(table.createdAt),
+}));
+
+export const posOrderItems = pgTable("pos_order_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  orderId: text("order_id")
+    .notNull()
+    .references(() => posOrders.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  productId: text("product_id")
+    .notNull()
+    .references(() => inventoryProducts.id, { onDelete: "restrict" }),
+  warehouseId: text("warehouse_id").references(() => inventoryWarehouses.id, {
+    onDelete: "set null",
+  }),
+  description: text("description").notNull(),
+  quantity: decimal("quantity", { precision: 12, scale: 3 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  discount: decimal("discount", { precision: 12, scale: 2 }).notNull().default("0"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).notNull().default("16"),
+  lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("pos_order_items_org_idx").on(table.organizationId),
+  orderIdx: index("pos_order_items_order_idx").on(table.orderId),
+  productIdx: index("pos_order_items_product_idx").on(table.productId),
+}));
+
+export const posOrderPayments = pgTable("pos_order_payments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  orderId: text("order_id")
+    .notNull()
+    .references(() => posOrders.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  method: text("method").notNull(),
+  reference: text("reference"),
+  phoneNumber: text("phone_number"),
+  notes: text("notes"),
+  status: posPaymentStatusEnum("status").notNull().default("pending"),
+  transactionId: text("transaction_id"),
+  providerMetadata: jsonb("provider_metadata").$type<Record<string, unknown>>().default({}),
+  paidAt: timestamp("paid_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("pos_order_payments_org_idx").on(table.organizationId),
+  orderIdx: index("pos_order_payments_order_idx").on(table.orderId),
+  statusIdx: index("pos_order_payments_status_idx").on(table.status),
+}));
+
+export const posReturns = pgTable("pos_returns", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  orderId: text("order_id")
+    .notNull()
+    .references(() => posOrders.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  returnNumber: text("return_number").notNull(),
+  reason: posReturnReasonEnum("reason").notNull(),
+  description: text("description"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  refundMethod: text("refund_method").notNull(),
+  refundStatus: posPaymentStatusEnum("refund_status").notNull().default("pending"),
+  refundReference: text("refund_reference"),
+  processedAt: timestamp("processed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("pos_returns_org_idx").on(table.organizationId),
+  orderIdx: index("pos_returns_order_idx").on(table.orderId),
+  userIdx: index("pos_returns_user_idx").on(table.userId),
+  returnNumberIdx: uniqueIndex("pos_returns_return_number_idx").on(table.returnNumber, table.organizationId),
+}));
+
+export const posReturnItems = pgTable("pos_return_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  returnId: text("return_id")
+    .notNull()
+    .references(() => posReturns.id, { onDelete: "cascade" }),
+  orderItemId: text("order_item_id").references(() => posOrderItems.id, {
+    onDelete: "set null",
+  }),
+  productId: text("product_id")
+    .notNull()
+    .references(() => inventoryProducts.id, { onDelete: "restrict" }),
+  warehouseId: text("warehouse_id").references(() => inventoryWarehouses.id, {
+    onDelete: "set null",
+  }),
+  quantity: decimal("quantity", { precision: 12, scale: 3 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 12, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  returnIdx: index("pos_return_items_return_idx").on(table.returnId),
+  productIdx: index("pos_return_items_product_idx").on(table.productId),
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1032,6 +1267,7 @@ export const auditCategoryEnum = pgEnum("audit_category", [
   "notifications",
   "tasks",
   "crm",
+  "pos",
 ]);
 
 // Notifications
@@ -1047,6 +1283,7 @@ export const notificationCategoryEnum = pgEnum("notification_category", [
   "system",
   "organization",
   "crm",
+  "pos",
 ]);
 
 export const notificationPriorityEnum = pgEnum("notification_priority", [
@@ -3927,6 +4164,95 @@ export const procurementAiRecommendationsRelations = relations(
   })
 );
 
+export const posSessionsRelations = relations(posSessions, ({ one, many }) => ({
+  user: one(users, { fields: [posSessions.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [posSessions.organizationId],
+    references: [organizations.id],
+  }),
+  orders: many(posOrders),
+}));
+
+export const posOrdersRelations = relations(posOrders, ({ one, many }) => ({
+  user: one(users, { fields: [posOrders.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [posOrders.organizationId],
+    references: [organizations.id],
+  }),
+  session: one(posSessions, {
+    fields: [posOrders.sessionId],
+    references: [posSessions.id],
+  }),
+  client: one(clients, {
+    fields: [posOrders.clientId],
+    references: [clients.id],
+  }),
+  warehouse: one(inventoryWarehouses, {
+    fields: [posOrders.warehouseId],
+    references: [inventoryWarehouses.id],
+  }),
+  invoice: one(invoices, {
+    fields: [posOrders.invoiceId],
+    references: [invoices.id],
+  }),
+  items: many(posOrderItems),
+  payments: many(posOrderPayments),
+  returns: many(posReturns),
+}));
+
+export const posOrderItemsRelations = relations(posOrderItems, ({ one }) => ({
+  order: one(posOrders, {
+    fields: [posOrderItems.orderId],
+    references: [posOrders.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [posOrderItems.productId],
+    references: [inventoryProducts.id],
+  }),
+  warehouse: one(inventoryWarehouses, {
+    fields: [posOrderItems.warehouseId],
+    references: [inventoryWarehouses.id],
+  }),
+}));
+
+export const posOrderPaymentsRelations = relations(posOrderPayments, ({ one }) => ({
+  order: one(posOrders, {
+    fields: [posOrderPayments.orderId],
+    references: [posOrders.id],
+  }),
+}));
+
+export const posReturnsRelations = relations(posReturns, ({ one, many }) => ({
+  order: one(posOrders, {
+    fields: [posReturns.orderId],
+    references: [posOrders.id],
+  }),
+  user: one(users, {
+    fields: [posReturns.userId],
+    references: [users.id],
+  }),
+  items: many(posReturnItems),
+}));
+
+export const posReturnItemsRelations = relations(posReturnItems, ({ one }) => ({
+  returnRecord: one(posReturns, {
+    fields: [posReturnItems.returnId],
+    references: [posReturns.id],
+  }),
+  orderItem: one(posOrderItems, {
+    fields: [posReturnItems.orderItemId],
+    references: [posOrderItems.id],
+  }),
+  product: one(inventoryProducts, {
+    fields: [posReturnItems.productId],
+    references: [inventoryProducts.id],
+  }),
+  warehouse: one(inventoryWarehouses, {
+    fields: [posReturnItems.warehouseId],
+    references: [inventoryWarehouses.id],
+  }),
+}));
+
 // ── Procurement types ──────────────────────────────────────────────────────────
 export type ProcurementPurchaseRequest =
   typeof procurementPurchaseRequests.$inferSelect;
@@ -3980,3 +4306,14 @@ export type ApprovalLevelStatus =
   (typeof approvalLevelStatusEnum.enumValues)[number];
 export type RecommendationStatus =
   (typeof recommendationStatusEnum.enumValues)[number];
+export type PosOrderStatus = (typeof posOrderStatusEnum.enumValues)[number];
+export type PosPaymentStatus = (typeof posPaymentStatusEnum.enumValues)[number];
+export type PosSessionStatus = (typeof posSessionStatusEnum.enumValues)[number];
+export type PosReturnReason = (typeof posReturnReasonEnum.enumValues)[number];
+
+export type PosSession = typeof posSessions.$inferSelect;
+export type PosOrder = typeof posOrders.$inferSelect;
+export type PosOrderItem = typeof posOrderItems.$inferSelect;
+export type PosOrderPayment = typeof posOrderPayments.$inferSelect;
+export type PosReturn = typeof posReturns.$inferSelect;
+export type PosReturnItem = typeof posReturnItems.$inferSelect;

@@ -656,3 +656,59 @@ export type TaskInput = z.infer<typeof taskSchema>;
 export type PaymentInput = z.infer<typeof paymentSchema>;
 export type MpesaStkInput = z.infer<typeof mpesaStkSchema>;
 export type AiRequestInput = z.infer<typeof aiRequestSchema>;
+
+// ── Point of Sale (POS) (Epic 4) ─────────────────────────────────────────────
+
+export const posOrderItemSchema = z.object({
+  productId: z.string().min(1, "Product is required"),
+  quantity: z.coerce.number().positive("Quantity must be positive"),
+  unitPrice: z.coerce.number().min(0, "Price must be 0 or more"),
+  discount: z.coerce.number().min(0).default(0),
+  taxRate: z.coerce.number().min(0).max(100).default(16),
+});
+
+export const posOrderSchema = z.object({
+  clientId: z.string().optional(),
+  warehouseId: z.string().optional(),
+  currency: z.string().default("KES"),
+  taxRate: z.coerce.number().min(0).max(100).default(16),
+  items: z.array(posOrderItemSchema).min(1, "Add at least one item"),
+  discount: z.coerce.number().min(0).default(0),
+  notes: z.string().optional(),
+});
+
+export const posPaymentSchema = z.object({
+  amount: z.coerce.number().positive("Amount must be positive"),
+  method: z.enum(["cash", "mpesa", "card", "bank_transfer", "other"]),
+  reference: z.string().optional(),
+  phoneNumber: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const posReturnSchema = z.object({
+  reason: z.enum(["damaged", "wrong_item", "customer_request", "expired", "other"]),
+  description: z.string().optional(),
+  items: z.array(z.object({
+    productId: z.string().min(1),
+    quantity: z.coerce.number().positive(),
+    unitPrice: z.coerce.number().min(0),
+  })).min(1, "Add at least one return item"),
+});
+
+export const posSessionSchema = z.object({
+  openingFloat: z.coerce.number().min(0).default(0),
+  notes: z.string().optional(),
+});
+
+export const posSessionCloseSchema = z.object({
+  closingFloat: z.coerce.number().min(0),
+  cashDeposited: z.coerce.number().min(0),
+  notes: z.string().optional(),
+});
+
+export type PosOrderItemInput = z.infer<typeof posOrderItemSchema>;
+export type PosOrderInput = z.infer<typeof posOrderSchema>;
+export type PosPaymentInput = z.infer<typeof posPaymentSchema>;
+export type PosReturnInput = z.infer<typeof posReturnSchema>;
+export type PosSessionInput = z.infer<typeof posSessionSchema>;
+export type PosSessionCloseInput = z.infer<typeof posSessionCloseSchema>;

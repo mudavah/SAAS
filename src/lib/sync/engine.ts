@@ -69,7 +69,7 @@ export async function getSyncState(): Promise<SyncState> {
 
 export async function queueOfflineChange<T extends Record<string, unknown>>(
   operation: "create" | "update" | "delete",
-  entity: "clients" | "products" | "invoices" | "payments" | "expenses" | "settings",
+  entity: "clients" | "products" | "invoices" | "payments" | "expenses" | "settings" | "posOrders" | "posReturns",
   entityId: string,
   organizationId: string,
   payload: T,
@@ -185,8 +185,8 @@ export async function pullServerChanges(since?: number): Promise<number> {
     let pulled = 0;
 
     for (const change of data.changes) {
-      const entity = change.entity as "clients" | "products" | "invoices" | "payments" | "expenses" | "settings";
-      if (!["clients", "products", "invoices", "payments", "expenses", "settings"].includes(entity)) {
+      const entity = change.entity as "clients" | "products" | "invoices" | "payments" | "expenses" | "settings" | "posOrders" | "posReturns";
+      if (!["clients", "products", "invoices", "payments", "expenses", "settings", "posOrders", "posReturns"].includes(entity)) {
         continue;
       }
 

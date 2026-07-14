@@ -7,7 +7,9 @@ export type OfflineStoreName =
   | "payments"
   | "expenses"
   | "settings"
-  | "pendingOperations";
+  | "pendingOperations"
+  | "posOrders"
+  | "posReturns";
 
 export type OperationStatus = "pending" | "processing" | "completed" | "failed";
 export type OperationPriority = "low" | "medium" | "high";
@@ -110,6 +112,54 @@ export interface OfflineExpense {
   updatedAt?: string;
 }
 
+export interface OfflinePosOrder {
+  id: string;
+  userId: string;
+  organizationId: string;
+  sessionId?: string;
+  clientId?: string;
+  warehouseId?: string;
+  orderNumber: string;
+  status: string;
+  currency: string;
+  subtotal: string;
+  taxRate: string;
+  taxAmount: string;
+  discount: string;
+  total: string;
+  amountPaid: string;
+  changeDue: string;
+  paymentMethod?: string;
+  paymentStatus: string;
+  notes?: string;
+  invoiceId?: string;
+  etimsStatus?: string;
+  etimsInvoiceNumber?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OfflinePosReturn {
+  id: string;
+  orderId: string;
+  organizationId: string;
+  userId: string;
+  returnNumber: string;
+  reason: string;
+  description?: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  refundMethod: string;
+  refundStatus: string;
+  refundReference?: string;
+  processedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OfflineSetting {
   key: string;
   value: unknown;
@@ -170,7 +220,9 @@ export type OfflineRecord =
   | OfflineInvoice
   | OfflinePayment
   | OfflineExpense
-  | OfflineSetting;
+  | OfflineSetting
+  | OfflinePosOrder
+  | OfflinePosReturn;
 
 export interface OfflineSchema extends DBSchema {
   clients: {
@@ -227,6 +279,24 @@ export interface OfflineSchema extends DBSchema {
       byUpdatedAt: string;
     };
   };
+  posOrders: {
+    key: string;
+    value: OfflinePosOrder;
+    indexes: {
+      byId: string;
+      byOrganization: string;
+      byUpdatedAt: string;
+    };
+  };
+  posReturns: {
+    key: string;
+    value: OfflinePosReturn;
+    indexes: {
+      byId: string;
+      byOrganization: string;
+      byUpdatedAt: string;
+    };
+  };
   pendingOperations: {
     key: string;
     value: PendingOperation;
@@ -249,4 +319,6 @@ export type OfflineStore =
   | "payments"
   | "expenses"
   | "settings"
-  | "pendingOperations";
+  | "pendingOperations"
+  | "posOrders"
+  | "posReturns";

@@ -93,7 +93,13 @@ export type PermissionKey =
   | "crm.quotations.manage"
   | "crm.quotations.approve"
   | "crm.reports.view"
-  | "crm.ai.access";
+  | "crm.ai.access"
+  | "pos.view"
+  | "pos.sales.create"
+  | "pos.sales.view"
+  | "pos.returns"
+  | "pos.shift.manage"
+  | "pos.settings.manage";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -209,6 +215,12 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "crm.quotations.approve": { key: "crm.quotations.approve", category: "crm", name: "Approve Quotations", description: "Approve or reject quotations in the approval workflow" },
   "crm.reports.view": { key: "crm.reports.view", category: "crm", name: "View CRM Reports", description: "View CRM sales funnel, conversion and forecasting reports" },
   "crm.ai.access": { key: "crm.ai.access", category: "crm", name: "Access CRM AI", description: "Use the AI CRM assistant for prioritization, predictions and insights" },
+  "pos.view": { key: "pos.view", category: "pos", name: "View POS", description: "View POS dashboard and sales" },
+  "pos.sales.create": { key: "pos.sales.create", category: "pos", name: "Create Sales", description: "Create new POS sales and process payments" },
+  "pos.sales.view": { key: "pos.sales.view", category: "pos", name: "View Sales", description: "View POS sales history and details" },
+  "pos.returns": { key: "pos.returns", category: "pos", name: "Process Returns", description: "Process returns and refunds at POS" },
+  "pos.shift.manage": { key: "pos.shift.manage", category: "pos", name: "Manage Shifts", description: "Open and close cashier shifts/sessions" },
+  "pos.settings.manage": { key: "pos.settings.manage", category: "pos", name: "Manage POS Settings", description: "Configure POS terminals, printers, and payment methods" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -329,6 +341,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     ...CRM_PERMS,
     "crm.quotations.approve",
     "crm.ai.access",
+    "pos.view",
+    "pos.sales.create",
+    "pos.sales.view",
+    "pos.returns",
+    "pos.shift.manage",
+    "pos.settings.manage",
   ],
 
   accountant: [
@@ -408,14 +426,23 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
   cashier: [
     "organization.view",
     "clients.view",
+    "clients.create",
     "invoices.view",
     "payments.view",
     "payments.create",
     "payments.receive",
+    "payments.refund",
     "expenses.view",
+    "inventory.view",
     "crm.view",
+    "crm.contacts.manage",
     "notifications.view",
     "timeline.view",
+    "pos.view",
+    "pos.sales.create",
+    "pos.sales.view",
+    "pos.returns",
+    "pos.shift.manage",
     ...TASK_PERMS,
   ],
 
@@ -441,6 +468,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "notifications.view",
     "timeline.view",
     ...TASK_PERMS,
+    "pos.view",
+    "pos.sales.create",
+    "pos.sales.view",
+    "pos.returns",
+    "pos.shift.manage",
   ],
 
   employee: [

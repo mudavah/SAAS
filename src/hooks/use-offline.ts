@@ -15,6 +15,8 @@ import type {
   OfflineInvoice,
   OfflinePayment,
   OfflineExpense,
+  OfflinePosOrder,
+  OfflinePosReturn,
   OfflineSetting,
   OfflineStore,
   OfflineDB,
@@ -37,6 +39,8 @@ type OfflineData = {
   invoices: OfflineInvoice[];
   payments: OfflinePayment[];
   expenses: OfflineExpense[];
+  posOrders: OfflinePosOrder[];
+  posReturns: OfflinePosReturn[];
   settings: OfflineSetting[];
 };
 
@@ -48,6 +52,8 @@ const ENTITY_STORES: Record<keyof Omit<OfflineData, "settings">, OfflineStore> =
   invoices: "invoices",
   payments: "payments",
   expenses: "expenses",
+  posOrders: "posOrders",
+  posReturns: "posReturns",
 };
 
 export function useOffline() {
@@ -60,6 +66,8 @@ export function useOffline() {
     invoices: [],
     payments: [],
     expenses: [],
+    posOrders: [],
+    posReturns: [],
     settings: [],
   });
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +158,7 @@ export function useOffline() {
 
   const mutate = useCallback(
     async <T extends Record<string, unknown>>(
-      entity: "clients" | "products" | "invoices" | "payments" | "expenses",
+      entity: "clients" | "products" | "invoices" | "payments" | "expenses" | "posOrders" | "posReturns",
       entityId: string,
       payload: T,
       operation: "create" | "update" | "delete" = "update",
@@ -265,6 +273,8 @@ export function useOffline() {
       invoices: [],
       payments: [],
       expenses: [],
+      posOrders: [],
+      posReturns: [],
       settings: [],
     });
     setPendingCount(0);
