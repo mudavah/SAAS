@@ -2644,6 +2644,224 @@ export const apiUsage = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 6 — DEVELOPER PLATFORM & PUBLIC API
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const oauthClientStatusEnum = pgEnum("oauth_client_status", [
+  "active",
+  "revoked",
+]);
+
+export const webhookStatusEnum = pgEnum("webhook_status", [
+  "active",
+  "paused",
+  "disabled",
+]);
+
+export const webhookDeliveryStatusEnum = pgEnum("webhook_delivery_status", [
+  "pending",
+  "delivered",
+  "failed",
+  "retrying",
+]);
+
+export const oauthClients = pgTable(
+  "oauth_clients",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    redirectUris: jsonb("redirect_uris").$type<string[]>().default([]).notNull(),
+    scopes: jsonb("scopes").$type<string[]>().default([]).notNull(),
+    clientId: text("client_id").notNull().unique(),
+    clientSecretHash: text("client_secret_hash").notNull(),
+    status: oauthClientStatusEnum("status").default("active").notNull(),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (c) => [index("oauth_client_org").on(c.organizationId)]
+);
+
+export const oauthAccessTokens = pgTable(
+  "oauth_access_tokens",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    scopes: jsonb("scopes").$type<string[]>().default([]).notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("oauth_accesstoken_org").on(t.organizationId),
+    index("oauth_accesstoken_client").on(t.clientId),
+  ]
+);
+
+export const oauthRefreshTokens = pgTable(
+  "oauth_refresh_tokens",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    accessTokenId: text("access_token_id")
+      .references(() => oauthAccessTokens.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("oauth_refreshtoken_org").on(t.organizationId),
+    index("oauth_refreshtoken_access").on(t.accessTokenId),
+  ]
+);
+
+export const oauthAuthorizationCodes = pgTable(
+  "oauth_authorization_codes",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    redirectUri: text("redirect_uri").notNull(),
+    scopes: jsonb("scopes").$type<string[]>().default([]).notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (c) => [
+    index("oauth_authcode_org").on(c.organizationId),
+    index("oauth_authcode_client").on(c.clientId),
+  ]
+);
+
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    secret: text("secret").notNull(),
+    events: jsonb("events").$type<string[]>().default([]).notNull(),
+    status: webhookStatusEnum("status").default("active").notNull(),
+    headers: jsonb("headers").$type<Record<string, string>>().default({}).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (w) => [index("webhook_org").on(w.organizationId)]
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    webhookId: text("webhook_id")
+      .notNull()
+      .references(() => webhooks.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    status: webhookDeliveryStatusEnum("status").default("pending").notNull(),
+    statusCode: integer("status_code"),
+    responseBody: text("response_body"),
+    attempts: integer("attempts").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { mode: "date" }),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (d) => [
+    index("webhookdelivery_org").on(d.organizationId),
+    index("webhookdelivery_webhook").on(d.webhookId),
+    index("webhookdelivery_status").on(d.status),
+  ]
+);
+
+export const apiSandboxSessions = pgTable(
+  "api_sandbox_sessions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    environment: text("environment").default("sandbox").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+  },
+  (s) => [index("sandbox_org").on(s.organizationId)]
+);
+
+export const apiAnalyticsDaily = pgTable(
+  "api_analytics_daily",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id")
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    totalRequests: integer("total_requests").default(0).notNull(),
+    successfulRequests: integer("successful_requests").default(0).notNull(),
+    failedRequests: integer("failed_requests").default(0).notNull(),
+    avgResponseTimeMs: integer("avg_response_time_ms"),
+    topEndpoints: jsonb("top_endpoints").$type<Record<string, number>>().default({}).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (a) => ({
+    uniqueAnalytics: uniqueIndex("api_analytics_daily_unique").on(a.organizationId, a.apiKeyId, a.date),
+    orgDateIdx: index("api_analytics_org_date").on(a.organizationId, a.date),
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tenant scoping helper columns on existing business tables
 // ─────────────────────────────────────────────────────────────────────────────
 // `organizationId` is added to every business table so all data is isolated per
@@ -5726,6 +5944,96 @@ export const posReturnItemsRelations = relations(posReturnItems, ({ one }) => ({
   }),
 }));
 
+// Developer Platform relations
+export const oauthClientsRelations = relations(oauthClients, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [oauthClients.organizationId],
+    references: [organizations.id],
+  }),
+  accessTokens: many(oauthAccessTokens),
+  refreshTokens: many(oauthRefreshTokens),
+  authorizationCodes: many(oauthAuthorizationCodes),
+}));
+
+export const oauthAccessTokensRelations = relations(oauthAccessTokens, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [oauthAccessTokens.organizationId],
+    references: [organizations.id],
+  }),
+  client: one(oauthClients, {
+    fields: [oauthAccessTokens.clientId],
+    references: [oauthClients.id],
+  }),
+  refreshTokens: many(oauthRefreshTokens),
+}));
+
+export const oauthRefreshTokensRelations = relations(oauthRefreshTokens, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [oauthRefreshTokens.organizationId],
+    references: [organizations.id],
+  }),
+  client: one(oauthClients, {
+    fields: [oauthRefreshTokens.clientId],
+    references: [oauthClients.id],
+  }),
+  accessToken: one(oauthAccessTokens, {
+    fields: [oauthRefreshTokens.accessTokenId],
+    references: [oauthAccessTokens.id],
+  }),
+}));
+
+export const oauthAuthorizationCodesRelations = relations(oauthAuthorizationCodes, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [oauthAuthorizationCodes.organizationId],
+    references: [organizations.id],
+  }),
+  client: one(oauthClients, {
+    fields: [oauthAuthorizationCodes.clientId],
+    references: [oauthClients.id],
+  }),
+}));
+
+export const webhooksRelations = relations(webhooks, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [webhooks.organizationId],
+    references: [organizations.id],
+  }),
+  deliveries: many(webhookDeliveries),
+}));
+
+export const webhookDeliveriesRelations = relations(webhookDeliveries, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [webhookDeliveries.organizationId],
+    references: [organizations.id],
+  }),
+  webhook: one(webhooks, {
+    fields: [webhookDeliveries.webhookId],
+    references: [webhooks.id],
+  }),
+}));
+
+export const apiSandboxSessionsRelations = relations(apiSandboxSessions, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [apiSandboxSessions.organizationId],
+    references: [organizations.id],
+  }),
+  apiKey: one(apiKeys, {
+    fields: [apiSandboxSessions.apiKeyId],
+    references: [apiKeys.id],
+  }),
+}));
+
+export const apiAnalyticsDailyRelations = relations(apiAnalyticsDaily, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [apiAnalyticsDaily.organizationId],
+    references: [organizations.id],
+  }),
+  apiKey: one(apiKeys, {
+    fields: [apiAnalyticsDaily.apiKeyId],
+    references: [apiKeys.id],
+  }),
+}));
+
 // ── Procurement types ──────────────────────────────────────────────────────────
 export type ProcurementPurchaseRequest =
   typeof procurementPurchaseRequests.$inferSelect;
@@ -5851,3 +6159,18 @@ export type PayslipStatus = (typeof payslipStatusEnum.enumValues)[number];
 export type PayrollItemType = (typeof payrollItemTypeEnum.enumValues)[number];
 export type SalaryStructureType = (typeof salaryStructureTypeEnum.enumValues)[number];
 export type PensionProviderType = (typeof pensionProviderTypeEnum.enumValues)[number];
+
+// Developer Platform types
+export type OauthClient = typeof oauthClients.$inferSelect;
+export type OauthAccessToken = typeof oauthAccessTokens.$inferSelect;
+export type OauthRefreshToken = typeof oauthRefreshTokens.$inferSelect;
+export type OauthAuthorizationCode = typeof oauthAuthorizationCodes.$inferSelect;
+export type Webhook = typeof webhooks.$inferSelect;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type ApiSandboxSession = typeof apiSandboxSessions.$inferSelect;
+export type ApiAnalyticsDaily = typeof apiAnalyticsDaily.$inferSelect;
+
+// Developer Platform enums
+export type OauthClientStatus = (typeof oauthClientStatusEnum.enumValues)[number];
+export type WebhookStatus = (typeof webhookStatusEnum.enumValues)[number];
+export type WebhookDeliveryStatus = (typeof webhookDeliveryStatusEnum.enumValues)[number];

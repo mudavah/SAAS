@@ -74,6 +74,12 @@ export type PermissionKey =
   | "roles.manage"
   | "api.keys.manage"
   | "api.view"
+  | "api.analytics.view"
+  | "api.docs.view"
+  | "api.sdk.generate"
+  | "oauth.clients.manage"
+  | "webhooks.manage"
+  | "sandbox.manage"
   | "audit.view"
   | "notifications.view"
   | "notifications.manage"
@@ -215,6 +221,12 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
 
   "api.keys.manage": { key: "api.keys.manage", category: "api", name: "Manage API Keys", description: "Create/revoke API keys" },
   "api.view": { key: "api.view", category: "api", name: "View API", description: "View API usage and docs" },
+  "oauth.clients.manage": { key: "oauth.clients.manage", category: "api", name: "Manage OAuth Clients", description: "Create and manage OAuth 2.0 client applications" },
+  "webhooks.manage": { key: "webhooks.manage", category: "api", name: "Manage Webhooks", description: "Create and manage webhook subscriptions" },
+  "sandbox.manage": { key: "sandbox.manage", category: "api", name: "Manage Sandbox", description: "Manage API sandbox sessions" },
+  "api.analytics.view": { key: "api.analytics.view", category: "api", name: "View API Analytics", description: "View API usage analytics and metrics" },
+  "api.docs.view": { key: "api.docs.view", category: "api", name: "View API Docs", description: "View OpenAPI documentation" },
+  "api.sdk.generate": { key: "api.sdk.generate", category: "api", name: "Generate SDKs", description: "Generate client SDKs from API schema" },
 
   "audit.view": { key: "audit.view", category: "audit", name: "View Audit Logs", description: "View audit logs" },
 
@@ -443,6 +455,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "pos.settings.manage",
     ...HR_PERMS,
     ...PAYROLL_PERMS,
+    "api.keys.manage",
+    "api.view",
+    "api.analytics.view",
+    "api.docs.view",
+    "api.sdk.generate",
+    "oauth.clients.manage",
+    "webhooks.manage",
+    "sandbox.manage",
   ],
 
   accountant: [

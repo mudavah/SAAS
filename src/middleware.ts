@@ -17,10 +17,12 @@ export default auth((req) => {
   const isPaymentWebhooks = pathname.startsWith("/api/payments/webhooks");
   // Public API routes authenticate via API keys inside the handler.
   const isPublicApi = pathname.startsWith("/api/v1");
+  const isDeveloperApi = pathname.startsWith("/api/developer");
+  const isDeveloperPortal = pathname.startsWith("/developer");
   const isApi = pathname.startsWith("/api");
 
   // These endpoints authenticate themselves — never redirect them.
-  if (isApiAuth || isMpesaCallback || isPaymentWebhooks || isPublicApi) {
+  if (isApiAuth || isMpesaCallback || isPaymentWebhooks || isPublicApi || isDeveloperApi) {
     return NextResponse.next();
   }
 

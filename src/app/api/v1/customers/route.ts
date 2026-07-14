@@ -1,0 +1,90 @@
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { clients } from "@/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { handleApi, type ServerContext } from "@/lib/session";
+import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
+
+export async function OPTIONS(req: Request) {
+  return corsResponse(null, 204, req);
+}
+
+export async function GET(req: Request) {
+  return handleApi(req, "clients.view", async (ctx: ServerContext) => {
+    const rows = await db.query.clients.findMany({
+      where: eq(clients.organizationId, ctx.organizationId),
+      orderBy: (clients, { desc }) => [desc(clients.createdAt)],
+      limit: 100,
+    });
+    return NextResponse.json({ data: rows }, { headers: getCorsHeaders(req) });
+  });
+}
+
+export async function POST(req: Request) {
+  return handleApi(req, "clients.create", async (ctx: ServerContext) => {
+    try {
+      const body = await req.json();
+      if (!body.name) {
+        return NextResponse.json(
+          { error: "name is required" },
+          { status: 400, headers: getCorsHeaders(req) }
+        );
+      }
+      const [item] = await db
+        .insert(clients)
+        .values({
+          organizationId: ctx.organizationId,
+          userId: ctx.userId!,
+          name: body.name,
+          email: body.email || null,
+          phone: body.phone || null,
+          company: body.company || null,
+          address: body.address || null,
+          notes: body.notes || null,
+        })
+        .returning();
+      return NextResponse.json(
+        { data: item },
+        { status: 201, headers: getCorsHeaders(req) }
+      );
+    } catch (error) {
+      console.error("API create customer error:", error);
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500, headers: getCorsHeaders(req) }
+      );
+    }
+  });
+}
+
+export async function DELETE(req: Request) {
+  return handleApi(req, "clients.delete", async (ctx: ServerContext) => {
+    try {
+      const id = new URL(req.url).searchParams.get("id");
+      if (!id) {
+        return NextResponse.json(
+          { error: "id is required" },
+          { status: 400, headers: getCorsHeaders(req) }
+        );
+      }
+      await db
+        .delete(clients)
+        .where(
+          and(
+            eq(clients.id, id),
+            eq(clients.organizationId, ctx.organizationId)
+          )
+        );
+      return NextResponse.json(
+        { data: { id } },
+        { headers: getCorsHeaders(req) }
+      );
+    } catch (error) {
+      console.error("API delete customer error:", error);
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500, headers: getCorsHeaders(req) }
+      );
+    }
+  });
+}
