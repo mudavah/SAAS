@@ -420,6 +420,23 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "payroll.payment.exported",
   "payroll.journal.posted",
   "payroll.insight.generated",
+  "automation.workflow.created",
+  "automation.workflow.updated",
+  "automation.workflow.deleted",
+  "automation.workflow.run",
+  "automation.workflow.failed",
+  "automation.scheduled.run",
+  "approval.workflow.created",
+  "approval.requested",
+  "approval.approved",
+  "approval.rejected",
+  "approval.escalated",
+  "ai.forecast.generated",
+  "ai.report.generated",
+  "ai.document.generated",
+  "ai.task.recommended",
+  "ai.churn.predicted",
+  "ai.nl_query.executed",
 ]);
 
 // Onboarding enums
@@ -617,6 +634,462 @@ export const aiBusinessHealth = pgTable("ai_business_health", {
 }, (table) => ({
   orgIdx: index("ai_business_health_org_idx").on(table.organizationId),
   userIdx: index("ai_business_health_user_idx").on(table.userId),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI & Automation Platform (Epic 8)
+// ─────────────────────────────────────────────────────────────────────────────
+// Workflow automation, approval workflows and AI forecasting/insights. Every
+// table is multi-tenant (carries `organizationId`) and RBAC-gated. All runs are
+// audited and emit Business Timeline events.
+
+export const automationTriggerTypeEnum = pgEnum("automation_trigger_type", [
+  "event",
+  "schedule",
+  "manual",
+]);
+
+export const automationStatusEnum = pgEnum("automation_status", [
+  "draft",
+  "active",
+  "paused",
+  "error",
+]);
+
+export const automationRunStatusEnum = pgEnum("automation_run_status", [
+  "pending",
+  "running",
+  "success",
+  "partial",
+  "failed",
+  "skipped",
+]);
+
+export const automationActionTypeEnum = pgEnum("automation_action_type", [
+  "notify",
+  "create_task",
+  "create_invoice",
+  "create_quotation",
+  "create_purchase_order",
+  "send_email",
+  "create_timeline_event",
+  "update_record",
+  "webhook",
+  "ai_insight",
+  "ai_summarize",
+  "approval_request",
+  "delay",
+]);
+
+export const forecastTypeEnum = pgEnum("forecast_type", [
+  "revenue",
+  "cash_flow",
+  "inventory",
+  "churn",
+  "sales",
+]);
+
+export const aiReportTypeEnum = pgEnum("ai_report_type", [
+  "financial_summary",
+  "profit_loss",
+  "cash_flow",
+  "tax_readiness",
+  "custom",
+]);
+
+export const aiDocumentTypeEnum = pgEnum("ai_document_type", [
+  "invoice",
+  "quotation",
+  "purchase_order",
+]);
+
+export const aiDocumentStatusEnum = pgEnum("ai_document_status", [
+  "draft",
+  "reviewed",
+  "created",
+  "rejected",
+]);
+
+export const aiTaskStatusEnum = pgEnum("ai_task_status", [
+  "open",
+  "accepted",
+  "dismissed",
+  "completed",
+]);
+
+export const approvalStatusEnum = pgEnum("approval_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+  "escalated",
+]);
+
+export const churnRiskEnum = pgEnum("churn_risk", [
+  "low",
+  "medium",
+  "high",
+]);
+
+/**
+ * A workflow definition: one trigger + an ordered list of actions
+ * (`automation_actions`). Triggers can be a business event, a cron schedule,
+ * or manual invocation.
+ */
+export const automationWorkflows = pgTable("automation_workflows", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: automationStatusEnum("status").default("draft").notNull(),
+  triggerType: automationTriggerTypeEnum("trigger_type").notNull(),
+  // { event?: string, cron?: string, timezone?: string }
+  triggerConfig: jsonb("trigger_config").$type<Record<string, unknown>>().default({}),
+  // Top-level conditions (AND/OR groups) evaluated before the actions run.
+  conditions: jsonb("conditions").$type<Record<string, unknown>>().default({}),
+  version: integer("version").default(1).notNull(),
+  runCount: integer("run_count").default(0).notNull(),
+  lastRunAt: timestamp("last_run_at", { mode: "date" }),
+  lastRunStatus: automationRunStatusEnum("last_run_status"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("automation_workflows_org_idx").on(table.organizationId),
+  userIdx: index("automation_workflows_user_idx").on(table.userId),
+  statusIdx: index("automation_workflows_status_idx").on(table.status),
+  triggerIdx: index("automation_workflows_trigger_idx").on(table.triggerType),
+}));
+
+/** An ordered action within a workflow (the Trigger → Action builder's steps). */
+export const automationActions = pgTable("automation_actions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  workflowId: text("workflow_id")
+    .notNull()
+    .references(() => automationWorkflows.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  order: integer("order").notNull().default(0),
+  type: automationActionTypeEnum("type").notNull(),
+  name: text("name"),
+  // Action-specific parameters (recipients, template, target, payload, ...).
+  config: jsonb("config").$type<Record<string, unknown>>().default({}),
+  // Optional per-action conditions.
+  conditions: jsonb("conditions").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  workflowIdx: index("automation_actions_workflow_idx").on(table.workflowId),
+  orgIdx: index("automation_actions_org_idx").on(table.organizationId),
+}));
+
+/** A single execution of a workflow. */
+export const automationRuns = pgTable("automation_runs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  workflowId: text("workflow_id")
+    .notNull()
+    .references(() => automationWorkflows.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  triggerType: automationTriggerTypeEnum("trigger_type").notNull(),
+  triggerEvent: jsonb("trigger_event").$type<Record<string, unknown>>().default({}),
+  status: automationRunStatusEnum("status").default("pending").notNull(),
+  startedAt: timestamp("started_at", { mode: "date" }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { mode: "date" }),
+  error: text("error"),
+  actionsTotal: integer("actions_total").default(0),
+  actionsSucceeded: integer("actions_succeeded").default(0),
+  actionsFailed: integer("actions_failed").default(0),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  workflowIdx: index("automation_runs_workflow_idx").on(table.workflowId),
+  orgIdx: index("automation_runs_org_idx").on(table.organizationId),
+  statusIdx: index("automation_runs_status_idx").on(table.status),
+  createdIdx: index("automation_runs_created_idx").on(table.createdAt),
+}));
+
+/** Per-action log within a run (full audit of every automation step). */
+export const automationRunLogs = pgTable("automation_run_logs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  runId: text("run_id")
+    .notNull()
+    .references(() => automationRuns.id, { onDelete: "cascade" }),
+  workflowId: text("workflow_id")
+    .notNull()
+    .references(() => automationWorkflows.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  actionId: text("action_id"),
+  order: integer("order").notNull().default(0),
+  actionType: automationActionTypeEnum("action_type"),
+  status: automationRunStatusEnum("status").default("pending").notNull(),
+  input: jsonb("input").$type<Record<string, unknown>>().default({}),
+  output: jsonb("output").$type<Record<string, unknown>>().default({}),
+  error: text("error"),
+  startedAt: timestamp("started_at", { mode: "date" }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  runIdx: index("automation_run_logs_run_idx").on(table.runId),
+  orgIdx: index("automation_run_logs_org_idx").on(table.organizationId),
+}));
+
+/** Approval workflow definition (ordered approver steps per resource type). */
+export const approvalWorkflows = pgTable("approval_workflows", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  // invoice | quotation | purchase_order | expense | payroll_run | procurement_request | inventory_adjustment
+  resourceType: text("resource_type").notNull(),
+  // [{ order, label, approverRole, approverUserId? }]
+  steps: jsonb("steps").$type<Record<string, unknown>[]>().default([]),
+  isDefault: boolean("is_default").default(false).notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("approval_workflows_org_idx").on(table.organizationId),
+  resourceIdx: index("approval_workflows_resource_idx").on(table.resourceType),
+}));
+
+/** An approval request instance routed through an `approval_workflows`. */
+export const approvalRequests = pgTable("approval_requests", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  approvalWorkflowId: text("approval_workflow_id").references(() => approvalWorkflows.id, {
+    onDelete: "set null",
+  }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  title: text("title").notNull(),
+  status: approvalStatusEnum("status").default("pending").notNull(),
+  currentStep: integer("current_step").default(0).notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("approval_requests_org_idx").on(table.organizationId),
+  resourceIdx: index("approval_requests_resource_idx").on(table.resourceType, table.resourceId),
+  statusIdx: index("approval_requests_status_idx").on(table.status),
+}));
+
+/** Per-step decision records for an approval request. */
+export const approvalSteps = pgTable("approval_steps", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  approvalRequestId: text("approval_request_id")
+    .notNull()
+    .references(() => approvalRequests.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  stepOrder: integer("step_order").notNull(),
+  label: text("label"),
+  approverRole: text("approver_role"),
+  approverUserId: text("approver_user_id"),
+  status: approvalStatusEnum("status").default("pending").notNull(),
+  decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decided_at", { mode: "date" }),
+  comment: text("comment"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  requestIdx: index("approval_steps_request_idx").on(table.approvalRequestId),
+  orgIdx: index("approval_steps_org_idx").on(table.organizationId),
+}));
+
+/** Stored AI forecasts (revenue, cash flow, inventory, churn, sales). */
+export const aiForecasts = pgTable("ai_forecasts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: forecastTypeEnum("type").notNull(),
+  model: text("model").default("rules").notNull(),
+  horizonDays: integer("horizon_days"),
+  periodStart: timestamp("period_start", { mode: "date" }),
+  periodEnd: timestamp("period_end", { mode: "date" }),
+  // [{ date, value, lower?, upper? }]
+  data: jsonb("data").$type<Record<string, unknown>>().default({}),
+  confidence: integer("confidence"),
+  summary: text("summary"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_forecasts_org_idx").on(table.organizationId),
+  typeIdx: index("ai_forecasts_type_idx").on(table.type),
+  createdIdx: index("ai_forecasts_created_idx").on(table.createdAt),
+}));
+
+/** AI-generated financial / business reports. */
+export const aiReports = pgTable("ai_reports", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: aiReportTypeEnum("type").notNull(),
+  title: text("title").notNull(),
+  periodStart: timestamp("period_start", { mode: "date" }),
+  periodEnd: timestamp("period_end", { mode: "date" }),
+  content: jsonb("content").$type<Record<string, unknown>>().default({}),
+  narrative: text("narrative"),
+  model: text("model").default("rules").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_reports_org_idx").on(table.organizationId),
+  typeIdx: index("ai_reports_type_idx").on(table.type),
+}));
+
+/** AI-generated invoice/quotation/purchase-order drafts awaiting review. */
+export const aiDocuments = pgTable("ai_documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  documentType: aiDocumentTypeEnum("document_type").notNull(),
+  status: aiDocumentStatusEnum("status").default("draft").notNull(),
+  title: text("title"),
+  // Ready-to-create payload for the target record.
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  rationale: text("rationale"),
+  createdResourceId: text("created_resource_id"),
+  createdResourceType: text("created_resource_type"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_documents_org_idx").on(table.organizationId),
+  typeIdx: index("ai_documents_type_idx").on(table.documentType),
+  statusIdx: index("ai_documents_status_idx").on(table.status),
+}));
+
+/** AI task recommendations surfaced to users. */
+export const aiTaskRecommendations = pgTable("ai_task_recommendations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  priority: taskPriorityEnum("priority").default("medium").notNull(),
+  dueDate: timestamp("due_date", { mode: "date" }),
+  category: text("category").default("follow_up"),
+  resourceType: text("resource_type"),
+  resourceId: text("resource_id"),
+  status: aiTaskStatusEnum("status").default("open").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_task_recommendations_org_idx").on(table.organizationId),
+  userIdx: index("ai_task_recommendations_user_idx").on(table.userId),
+  statusIdx: index("ai_task_recommendations_status_idx").on(table.status),
+}));
+
+/** Natural-language business query log. */
+export const aiQueryLogs = pgTable("ai_query_logs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  query: text("query").notNull(),
+  intent: text("intent"),
+  entities: jsonb("entities").$type<Record<string, unknown>>().default({}),
+  plan: jsonb("plan").$type<Record<string, unknown> | unknown[]>().default({}),
+  answer: text("answer"),
+  model: text("model").default("rules").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_query_logs_org_idx").on(table.organizationId),
+  createdIdx: index("ai_query_logs_created_idx").on(table.createdAt),
+}));
+
+/** Customer churn predictions (clients, CRM companies, leads). */
+export const aiChurnPredictions = pgTable("ai_churn_predictions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  customerType: text("customer_type").notNull(),
+  customerId: text("customer_id").notNull(),
+  customerName: text("customer_name"),
+  risk: churnRiskEnum("risk").default("low").notNull(),
+  score: integer("score").default(0).notNull(),
+  factors: jsonb("factors").$type<string[]>().default([]),
+  recommendedAction: text("recommended_action"),
+  predictedAt: timestamp("predicted_at", { mode: "date" }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("ai_churn_predictions_org_idx").on(table.organizationId),
+  customerIdx: uniqueIndex("unique_org_customer_churn").on(
+    table.organizationId,
+    table.customerType,
+    table.customerId
+  ),
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────

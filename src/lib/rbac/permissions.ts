@@ -67,6 +67,12 @@ export type PermissionKey =
   | "integrations.stripe"
   | "ai.access"
   | "ai.manage"
+  | "automation.view"
+  | "automation.manage"
+  | "automation.execute"
+  | "approvals.view"
+  | "approvals.manage"
+  | "approvals.approve"
   | "team.view"
   | "team.invite"
   | "team.manage"
@@ -211,6 +217,12 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
 
   "ai.access": { key: "ai.access", category: "ai", name: "Access AI Features", description: "Use AI assistant features" },
   "ai.manage": { key: "ai.manage", category: "ai", name: "Manage AI", description: "Manage AI configuration and limits" },
+  "automation.view": { key: "automation.view", category: "ai", name: "View Automations", description: "View workflow automations" },
+  "automation.manage": { key: "automation.manage", category: "automation", name: "Manage Automations", description: "Create, edit and delete workflow automations" },
+  "automation.execute": { key: "automation.execute", category: "automation", name: "Run Automations", description: "Manually trigger and run workflow automations" },
+  "approvals.view": { key: "approvals.view", category: "automation", name: "View Approvals", description: "View approval workflows and requests" },
+  "approvals.manage": { key: "approvals.manage", category: "automation", name: "Manage Approval Workflows", description: "Create and edit approval workflow definitions" },
+  "approvals.approve": { key: "approvals.approve", category: "automation", name: "Approve Requests", description: "Approve or reject approval requests" },
 
   "team.view": { key: "team.view", category: "team", name: "View Team", description: "View team members" },
   "team.invite": { key: "team.invite", category: "team", name: "Invite Team", description: "Invite team members" },
@@ -463,6 +475,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "oauth.clients.manage",
     "webhooks.manage",
     "sandbox.manage",
+    "automation.view",
+    "automation.manage",
+    "automation.execute",
+    "approvals.view",
+    "approvals.manage",
+    "approvals.approve",
   ],
 
   accountant: [
@@ -508,6 +526,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "notifications.manage",
     ...TASK_PERMS,
     ...PAYROLL_PERMS,
+    "automation.view",
+    "approvals.view",
+    "approvals.approve",
   ],
 
   inventory_manager: [
@@ -537,6 +558,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "ai.access",
     "notifications.view",
     "timeline.view",
+    "automation.view",
+    "approvals.view",
+    "approvals.approve",
     ...TASK_PERMS,
   ],
 
@@ -584,6 +608,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "crm.ai.access",
     "notifications.view",
     "timeline.view",
+    "automation.view",
     ...TASK_PERMS,
     "pos.view",
     "pos.sales.create",
@@ -615,6 +640,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "hr.view",
     "hr.ai.access",
     ...PAYROLL_VIEW_PERMS,
+    "automation.view",
+    "approvals.view",
   ],
 
   viewer: [
@@ -635,6 +662,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "tasks.view",
     ...HR_VIEW_PERMS,
     ...PAYROLL_VIEW_PERMS,
+    "automation.view",
+    "approvals.view",
   ],
 };
 

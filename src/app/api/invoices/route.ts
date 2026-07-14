@@ -13,6 +13,7 @@ import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { dispatchBusinessEvent } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "invoices.view");
@@ -180,6 +181,14 @@ export async function POST(req: Request) {
     } catch (e) {
       console.error("Timeline emit failed (invoice.created):", e);
     }
+
+    // Fire event-driven automations (best-effort, non-blocking).
+    void dispatchBusinessEvent({
+      type: "invoice.created",
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      payload: { invoice: { id: invoice.id, status: invoice.status, total: invoice.total }, id: invoice.id },
+    });
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {

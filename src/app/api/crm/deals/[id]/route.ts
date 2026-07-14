@@ -7,6 +7,7 @@ import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { dispatchBusinessEvent } from "@/lib/automation/engine";
 
 export async function GET(
   req: Request,
@@ -115,6 +116,19 @@ export async function PATCH(
       });
     } catch (e) {
       console.error("Timeline emit failed (crm.deal won/lost):", e);
+    }
+
+    // Fire event-driven automations for a won deal (best-effort, non-blocking).
+    if (updated.status === "won" && existing.status === "open") {
+      void dispatchBusinessEvent({
+        type: "crm.deal.won",
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        payload: {
+          deal: { id: updated.id, name: updated.name, amount: updated.amount, currency: updated.currency },
+          id: updated.id,
+        },
+      });
     }
   }
 

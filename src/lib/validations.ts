@@ -1015,3 +1015,97 @@ export type PayrollRunInput = z.infer<typeof payrollRunSchema>;
 export type PayrollApprovalInput = z.infer<typeof payrollApprovalSchema>;
 export type PayrollPaymentExportInput = z.infer<typeof payrollPaymentExportSchema>;
 export type PayrollAiInsightInput = z.infer<typeof payrollAiInsightSchema>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI & Automation Platform (Epic 8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const automationActionConfigSchema = z.record(z.any()).default({});
+
+export const automationActionSchema = z.object({
+  id: z.string().optional(),
+  type: z.enum([
+    "notify",
+    "create_task",
+    "create_invoice",
+    "create_quotation",
+    "create_purchase_order",
+    "send_email",
+    "create_timeline_event",
+    "update_record",
+    "webhook",
+    "ai_insight",
+    "ai_summarize",
+    "approval_request",
+    "delay",
+  ]),
+  order: z.number().int().default(0),
+  name: z.string().optional(),
+  config: automationActionConfigSchema,
+  conditions: z.record(z.any()).default({}),
+});
+
+export const automationWorkflowSchema = z.object({
+  name: z.string().min(2, "Workflow name is required"),
+  description: z.string().optional(),
+  triggerType: z.enum(["event", "schedule", "manual"]),
+  triggerConfig: z.record(z.any()).default({}),
+  conditions: z.record(z.any()).default({}),
+  status: z.enum(["draft", "active", "paused", "error"]).default("draft"),
+  actions: z.array(automationActionSchema).default([]),
+});
+
+export const aiGenerateWorkflowSchema = z.object({
+  description: z.string().min(5, "Describe the workflow you want"),
+  useAi: z.boolean().default(false),
+});
+
+export const approvalStepSchema = z.object({
+  order: z.number().int().min(1),
+  label: z.string().optional(),
+  approverRole: z.string().optional(),
+  approverUserId: z.string().optional(),
+});
+
+export const approvalWorkflowSchema = z.object({
+  name: z.string().min(2, "Name is required"),
+  description: z.string().optional(),
+  resourceType: z.string().min(1, "Resource type is required"),
+  steps: z.array(approvalStepSchema).default([]),
+  isDefault: z.boolean().default(false),
+  active: z.boolean().default(true),
+});
+
+export const approvalDecisionSchema = z.object({
+  decision: z.enum(["approve", "reject"]),
+  comment: z.string().optional(),
+});
+
+export const forecastRequestSchema = z.object({
+  type: z.enum(["revenue", "cash_flow", "inventory"]).default("revenue"),
+  horizon: z.coerce.number().int().min(1).max(24).default(6),
+});
+
+export const nlQuerySchema = z.object({
+  query: z.string().min(3, "Ask a business question"),
+});
+
+export const aiReportGenerateSchema = z.object({
+  type: z.enum(["financial_summary", "profit_loss", "cash_flow", "tax_readiness", "custom"]).default("financial_summary"),
+});
+
+export const aiDocumentGenerateSchema = z.object({
+  documentType: z.enum(["invoice", "quotation", "purchase_order"]),
+  clientId: z.string().optional(),
+  companyId: z.string().optional(),
+  supplierId: z.string().optional(),
+  hint: z.string().optional(),
+  taxRate: z.coerce.number().min(0).max(100).optional(),
+  items: z
+    .array(z.object({ description: z.string(), quantity: z.number(), unitPrice: z.number() }))
+    .optional(),
+});
+
+export const aiDocumentCommitSchema = z.object({
+  documentId: z.string().min(1, "Document id is required"),
+});

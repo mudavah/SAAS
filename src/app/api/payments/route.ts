@@ -8,6 +8,7 @@ import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { toCents, fromCents } from "@/lib/money";
+import { dispatchBusinessEvent } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "payments.view");
@@ -103,6 +104,14 @@ export async function POST(req: Request) {
             updatedAt: new Date(),
           })
           .where(eq(invoices.id, invoiceId));
+      });
+
+      // Fire event-driven automations for completed payments (best-effort).
+      void dispatchBusinessEvent({
+        type: "payment.received",
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        payload: { payment: { id: payment.id, amount: parsed.data.amount, invoiceId }, id: payment.id },
       });
     }
 
