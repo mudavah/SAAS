@@ -63,6 +63,59 @@ export const taskPriorityEnum = pgEnum("task_priority", [
   "high",
 ]);
 
+// Enterprise Analytics enums (Epic 9)
+export const analyticsWidgetTypeEnum = pgEnum("analytics_widget_type", [
+  "kpi_card",
+  "line_chart",
+  "bar_chart",
+  "pie_chart",
+  "table",
+  "gauge",
+  "progress",
+  "heatmap",
+  "ranking",
+]);
+export const analyticsPeriodEnum = pgEnum("analytics_period", [
+  "today",
+  "week",
+  "month",
+  "quarter",
+  "year",
+  "custom",
+]);
+export const reportFormatEnum = pgEnum("report_format", [
+  "pdf",
+  "excel",
+  "csv",
+  "json",
+]);
+export const scheduleFrequencyEnum = pgEnum("schedule_frequency", [
+  "daily",
+  "weekly",
+  "monthly",
+  "quarterly",
+  "yearly",
+]);
+export const scheduleStatusEnum = pgEnum("schedule_status", [
+  "active",
+  "paused",
+  "completed",
+  "failed",
+]);
+export const reportStatusEnum = pgEnum("report_status", [
+  "pending",
+  "generating",
+  "completed",
+  "failed",
+]);
+export const analyticsInsightTypeEnum = pgEnum("analytics_insight_type", [
+  "trend",
+  "anomaly",
+  "forecast",
+  "recommendation",
+  "alert",
+]);
+
 // Inventory enums
 export const inventoryItemTypeEnum = pgEnum("inventory_item_type", [
   "product",
@@ -3335,6 +3388,170 @@ export const apiAnalyticsDaily = pgTable(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Enterprise Analytics (Epic 9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const analyticsDashboards = pgTable("analytics_dashboards", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  layout: jsonb("layout").$type<Record<string, unknown>>().default({}).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  isShared: boolean("is_shared").default(false).notNull(),
+  sharedWithRoles: jsonb("shared_with_roles").$type<string[]>().default([]).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("analytics_dashboards_org_idx").on(table.organizationId),
+  userIdx: index("analytics_dashboards_user_idx").on(table.userId),
+  defaultIdx: index("analytics_dashboards_default_idx").on(table.isDefault),
+}));
+
+export const analyticsWidgets = pgTable("analytics_widgets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  dashboardId: text("dashboard_id")
+    .notNull()
+    .references(() => analyticsDashboards.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: analyticsWidgetTypeEnum("type").notNull(),
+  config: jsonb("config").$type<Record<string, unknown>>().default({}).notNull(),
+  dataSource: text("data_source").notNull(),
+  position: jsonb("position").$type<{ x: number; y: number; w: number; h: number }>().default({ x: 0, y: 0, w: 4, h: 4 }).notNull(),
+  refreshInterval: integer("refresh_interval").default(300).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("analytics_widgets_org_idx").on(table.organizationId),
+  dashboardIdx: index("analytics_widgets_dashboard_idx").on(table.dashboardId),
+  typeIdx: index("analytics_widgets_type_idx").on(table.type),
+}));
+
+export const analyticsSnapshots = pgTable("analytics_snapshots", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  widgetId: text("widget_id").references(() => analyticsWidgets.id, { onDelete: "cascade" }),
+  dashboardId: text("dashboard_id").references(() => analyticsDashboards.id, { onDelete: "cascade" }),
+  period: analyticsPeriodEnum("period").notNull(),
+  periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+  periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
+  computedAt: timestamp("computed_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("analytics_snapshots_org_idx").on(table.organizationId),
+  widgetIdx: index("analytics_snapshots_widget_idx").on(table.widgetId),
+  dashboardIdx: index("analytics_snapshots_dashboard_idx").on(table.dashboardId),
+  periodIdx: index("analytics_snapshots_period_idx").on(table.period),
+  createdIdx: index("analytics_snapshots_created_idx").on(table.computedAt),
+}));
+
+export const analyticsScheduledReports = pgTable("analytics_scheduled_reports", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  reportType: text("report_type").notNull(),
+  config: jsonb("config").$type<Record<string, unknown>>().default({}).notNull(),
+  format: reportFormatEnum("format").notNull().default("pdf"),
+  frequency: scheduleFrequencyEnum("frequency").notNull(),
+  status: scheduleStatusEnum("status").default("active").notNull(),
+  recipients: jsonb("recipients").$type<string[]>().default([]).notNull(),
+  lastRunAt: timestamp("last_run_at", { mode: "date" }),
+  nextRunAt: timestamp("next_run_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("analytics_scheduled_reports_org_idx").on(table.organizationId),
+  userIdx: index("analytics_scheduled_reports_user_idx").on(table.userId),
+  statusIdx: index("analytics_scheduled_reports_status_idx").on(table.status),
+  nextRunIdx: index("analytics_scheduled_reports_next_run_idx").on(table.nextRunAt),
+}));
+
+export const analyticsReportRuns = pgTable("analytics_report_runs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  scheduledReportId: text("scheduled_report_id").references(() => analyticsScheduledReports.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  reportType: text("report_type").notNull(),
+  format: reportFormatEnum("format").notNull(),
+  status: reportStatusEnum("status").default("pending").notNull(),
+  periodStart: timestamp("period_start", { mode: "date" }),
+  periodEnd: timestamp("period_end", { mode: "date" }),
+  parameters: jsonb("parameters").$type<Record<string, unknown>>().default({}).notNull(),
+  resultUrl: text("result_url"),
+  error: text("error"),
+  fileSize: integer("file_size"),
+  rowCount: integer("row_count"),
+  startedAt: timestamp("started_at", { mode: "date" }),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("analytics_report_runs_org_idx").on(table.organizationId),
+  scheduledIdx: index("analytics_report_runs_scheduled_idx").on(table.scheduledReportId),
+  statusIdx: index("analytics_report_runs_status_idx").on(table.status),
+  createdIdx: index("analytics_report_runs_created_idx").on(table.createdAt),
+}));
+
+export const analyticsInsights = pgTable("analytics_insights", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: analyticsInsightTypeEnum("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  severity: text("severity").default("info").notNull(),
+  confidence: integer("confidence").default(100).notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}).notNull(),
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: text("related_entity_id"),
+  isRead: boolean("is_read").default(false).notNull(),
+  isDismissed: boolean("is_dismissed").default(false).notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("analytics_insights_org_idx").on(table.organizationId),
+  userIdx: index("analytics_insights_user_idx").on(table.userId),
+  typeIdx: index("analytics_insights_type_idx").on(table.type),
+  readIdx: index("analytics_insights_read_idx").on(table.isRead),
+  createdIdx: index("analytics_insights_created_idx").on(table.createdAt),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tenant scoping helper columns on existing business tables
 // ─────────────────────────────────────────────────────────────────────────────
 // `organizationId` is added to every business table so all data is isolated per
@@ -6507,6 +6724,82 @@ export const apiAnalyticsDailyRelations = relations(apiAnalyticsDaily, ({ one })
   }),
 }));
 
+export const analyticsDashboardsRelations = relations(analyticsDashboards, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [analyticsDashboards.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [analyticsDashboards.userId],
+    references: [users.id],
+  }),
+  widgets: many(analyticsWidgets),
+}));
+
+export const analyticsWidgetsRelations = relations(analyticsWidgets, ({ one }) => ({
+  dashboard: one(analyticsDashboards, {
+    fields: [analyticsWidgets.dashboardId],
+    references: [analyticsDashboards.id],
+  }),
+  organization: one(organizations, {
+    fields: [analyticsWidgets.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const analyticsSnapshotsRelations = relations(analyticsSnapshots, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [analyticsSnapshots.organizationId],
+    references: [organizations.id],
+  }),
+  widget: one(analyticsWidgets, {
+    fields: [analyticsSnapshots.widgetId],
+    references: [analyticsWidgets.id],
+  }),
+  dashboard: one(analyticsDashboards, {
+    fields: [analyticsSnapshots.dashboardId],
+    references: [analyticsDashboards.id],
+  }),
+}));
+
+export const analyticsScheduledReportsRelations = relations(analyticsScheduledReports, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [analyticsScheduledReports.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [analyticsScheduledReports.userId],
+    references: [users.id],
+  }),
+  runs: many(analyticsReportRuns),
+}));
+
+export const analyticsReportRunsRelations = relations(analyticsReportRuns, ({ one }) => ({
+  scheduledReport: one(analyticsScheduledReports, {
+    fields: [analyticsReportRuns.scheduledReportId],
+    references: [analyticsScheduledReports.id],
+  }),
+  organization: one(organizations, {
+    fields: [analyticsReportRuns.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [analyticsReportRuns.userId],
+    references: [users.id],
+  }),
+}));
+
+export const analyticsInsightsRelations = relations(analyticsInsights, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [analyticsInsights.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [analyticsInsights.userId],
+    references: [users.id],
+  }),
+}));
+
 // ── Procurement types ──────────────────────────────────────────────────────────
 export type ProcurementPurchaseRequest =
   typeof procurementPurchaseRequests.$inferSelect;
@@ -6647,3 +6940,20 @@ export type ApiAnalyticsDaily = typeof apiAnalyticsDaily.$inferSelect;
 export type OauthClientStatus = (typeof oauthClientStatusEnum.enumValues)[number];
 export type WebhookStatus = (typeof webhookStatusEnum.enumValues)[number];
 export type WebhookDeliveryStatus = (typeof webhookDeliveryStatusEnum.enumValues)[number];
+
+// Enterprise Analytics types
+export type AnalyticsDashboard = typeof analyticsDashboards.$inferSelect;
+export type AnalyticsWidget = typeof analyticsWidgets.$inferSelect;
+export type AnalyticsSnapshot = typeof analyticsSnapshots.$inferSelect;
+export type AnalyticsScheduledReport = typeof analyticsScheduledReports.$inferSelect;
+export type AnalyticsReportRun = typeof analyticsReportRuns.$inferSelect;
+export type AnalyticsInsight = typeof analyticsInsights.$inferSelect;
+
+// Enterprise Analytics enums (TypeScript unions)
+export type AnalyticsWidgetType = (typeof analyticsWidgetTypeEnum.enumValues)[number];
+export type AnalyticsPeriod = (typeof analyticsPeriodEnum.enumValues)[number];
+export type ReportFormat = (typeof reportFormatEnum.enumValues)[number];
+export type ScheduleFrequency = (typeof scheduleFrequencyEnum.enumValues)[number];
+export type ScheduleStatus = (typeof scheduleStatusEnum.enumValues)[number];
+export type ReportStatus = (typeof reportStatusEnum.enumValues)[number];
+export type AnalyticsInsightType = (typeof analyticsInsightTypeEnum.enumValues)[number];

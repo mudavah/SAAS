@@ -136,7 +136,11 @@ export type PermissionKey =
   | "payroll.payslips.manage"
   | "payroll.reports.view"
   | "payroll.export"
-  | "payroll.settings.manage";
+  | "payroll.settings.manage"
+  | "analytics.view"
+  | "analytics.export"
+  | "analytics.dashboards.manage"
+  | "analytics.scheduled_reports.manage";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -297,6 +301,10 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "payroll.reports.view": { key: "payroll.reports.view", category: "payroll", name: "View Payroll Reports", description: "View payroll analytics and reports" },
   "payroll.export": { key: "payroll.export", category: "payroll", name: "Export Payroll", description: "Export payroll data and bank files" },
   "payroll.settings.manage": { key: "payroll.settings.manage", category: "payroll", name: "Manage Payroll Settings", description: "Configure statutory rates and payroll defaults" },
+  "analytics.view": { key: "analytics.view", category: "analytics", name: "View Analytics", description: "View enterprise analytics dashboards and reports" },
+  "analytics.export": { key: "analytics.export", category: "analytics", name: "Export Analytics", description: "Export analytics data to PDF, Excel or CSV" },
+  "analytics.dashboards.manage": { key: "analytics.dashboards.manage", category: "analytics", name: "Manage Dashboards", description: "Create, edit and delete custom analytics dashboards" },
+  "analytics.scheduled_reports.manage": { key: "analytics.scheduled_reports.manage", category: "analytics", name: "Manage Scheduled Reports", description: "Create and manage scheduled analytics reports" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -390,6 +398,13 @@ const PAYROLL_VIEW_PERMS: PermissionKey[] = [
   "payroll.reports.view",
 ];
 
+const ANALYTICS_PERMS: PermissionKey[] = [
+  "analytics.view",
+  "analytics.export",
+  "analytics.dashboards.manage",
+  "analytics.scheduled_reports.manage",
+];
+
 /**
  * System role → permission mapping. Owners get everything. Each lower role is a
  * subset of the higher ones, with role-specific focuses layered on top.
@@ -467,6 +482,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "pos.settings.manage",
     ...HR_PERMS,
     ...PAYROLL_PERMS,
+    ...ANALYTICS_PERMS,
     "api.keys.manage",
     "api.view",
     "api.analytics.view",
@@ -526,6 +542,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "notifications.manage",
     ...TASK_PERMS,
     ...PAYROLL_PERMS,
+    ...ANALYTICS_PERMS,
     "automation.view",
     "approvals.view",
     "approvals.approve",
@@ -553,6 +570,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "purchasing.budget.manage",
     "purchasing.reports.view",
     "reports.view_financial",
+    ...ANALYTICS_PERMS,
     "crm.view",
     "crm.reports.view",
     "ai.access",
