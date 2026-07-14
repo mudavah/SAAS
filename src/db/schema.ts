@@ -378,6 +378,30 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "pos.shift.opened",
   "pos.shift.closed",
   "pos.payment.received",
+  "hr.employee.created",
+  "hr.employee.updated",
+  "hr.employee.terminated",
+  "hr.employee.resigned",
+  "hr.department.created",
+  "hr.department.updated",
+  "hr.position.created",
+  "hr.position.updated",
+  "hr.attendance.recorded",
+  "hr.leave.requested",
+  "hr.leave.approved",
+  "hr.leave.rejected",
+  "hr.shift.assigned",
+  "hr.applicant.created",
+  "hr.applicant.hired",
+  "hr.applicant.rejected",
+  "hr.onboarding.started",
+  "hr.onboarding.completed",
+  "hr.offboarding.started",
+  "hr.offboarding.completed",
+  "hr.performance.review.completed",
+  "hr.training.completed",
+  "hr.contract.created",
+  "hr.contract.expired",
 ]);
 
 // Onboarding enums
@@ -1268,6 +1292,7 @@ export const auditCategoryEnum = pgEnum("audit_category", [
   "tasks",
   "crm",
   "pos",
+  "hr",
 ]);
 
 // Notifications
@@ -1284,6 +1309,7 @@ export const notificationCategoryEnum = pgEnum("notification_category", [
   "organization",
   "crm",
   "pos",
+  "hr",
 ]);
 
 export const notificationPriorityEnum = pgEnum("notification_priority", [
@@ -3847,6 +3873,952 @@ export const procurementAiRecommendations = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE — HUMAN RESOURCE MANAGEMENT (HR) (Epic 5)
+// ─────────────────────────────────────────────────────────────────────────────
+// Every HR table is multi-tenant: it carries `organizationId` and user-scoped
+// ownership. Cross-references to employees/departments/positions are scoped so
+// a tenant can never read or mutate another tenant's HR data. All mutations are
+// gated by RBAC, audited, emit Business Timeline events, and integrate with
+// Notifications for reminders and approvals.
+
+// HR Enums
+export const employeeStatusEnum = pgEnum("employee_status", [
+  "active",
+  "on_leave",
+  "suspended",
+  "terminated",
+  "resigned",
+]);
+
+export const employmentTypeEnum = pgEnum("employment_type", [
+  "permanent",
+  "contract",
+  "part_time",
+  "intern",
+  "casual",
+]);
+
+export const contractTypeEnum = pgEnum("contract_type", [
+  "permanent",
+  "fixed_term",
+  "probation",
+  "internship",
+]);
+
+export const leaveTypeEnum = pgEnum("leave_type", [
+  "annual",
+  "sick",
+  "maternity",
+  "paternity",
+  "compassionate",
+  "unpaid",
+  "study",
+]);
+
+export const leaveStatusEnum = pgEnum("leave_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+]);
+
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "present",
+  "absent",
+  "late",
+  "half_day",
+  "on_leave",
+]);
+
+export const shiftStatusEnum = pgEnum("shift_status", [
+  "scheduled",
+  "active",
+  "completed",
+  "cancelled",
+]);
+
+export const applicantStatusEnum = pgEnum("applicant_status", [
+  "applied",
+  "screening",
+  "interview",
+  "offer",
+  "hired",
+  "rejected",
+]);
+
+export const onboardingTaskStatusEnum = pgEnum("onboarding_task_status", [
+  "pending",
+  "in_progress",
+  "completed",
+  "skipped",
+]);
+
+export const offboardingTypeEnum = pgEnum("offboarding_type", [
+  "resignation",
+  "termination",
+  "retirement",
+  "contract_end",
+]);
+
+export const performanceReviewStatusEnum = pgEnum("performance_review_status", [
+  "draft",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+
+export const trainingStatusEnum = pgEnum("training_status", [
+  "scheduled",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+
+export const documentTypeEnum = pgEnum("document_type", [
+  "id",
+  "passport",
+  "kra_pin",
+  "nssf",
+  "nhif",
+  "contract",
+  "certificate",
+  "resume",
+  "other",
+]);
+
+export const orgChartNodeTypeEnum = pgEnum("org_chart_node_type", [
+  "department",
+  "position",
+  "employee",
+]);
+
+export const aiHrInsightTypeEnum = pgEnum("ai_hr_insight_type", [
+  "turnover_risk",
+  "leave_pattern",
+  "training_gap",
+  "attendance_anomaly",
+  "performance_trend",
+  "headcount_forecast",
+]);
+
+// Departments
+export const hrDepartments = pgTable("hr_departments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  parentDepartmentId: text("parent_department_id").references(() => hrDepartments as any, {
+    onDelete: "set null",
+  }),
+  managerId: text("manager_id").references(() => hrEmployees as any, {
+    onDelete: "set null",
+  }),
+  costCenter: text("cost_center"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_departments_org_idx").on(table.organizationId),
+  userIdx: index("hr_departments_user_idx").on(table.userId),
+  parentIdx: index("hr_departments_parent_idx").on(table.parentDepartmentId),
+})) as any;
+
+// Positions
+export const hrPositions = pgTable("hr_positions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  departmentId: text("department_id")
+    .notNull()
+    .references(() => hrDepartments as any, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  employmentType: employmentTypeEnum("employment_type").notNull(),
+  contractType: contractTypeEnum("contract_type"),
+  salaryMin: decimal("salary_min", { precision: 12, scale: 2 }),
+  salaryMax: decimal("salary_max", { precision: 12, scale: 2 }),
+  currency: text("currency").default("KES").notNull(),
+  reportsToPositionId: text("reports_to_position_id").references(() => hrPositions as any, {
+    onDelete: "set null",
+  }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_positions_org_idx").on(table.organizationId),
+  userIdx: index("hr_positions_user_idx").on(table.userId),
+  deptIdx: index("hr_positions_dept_idx").on(table.departmentId),
+})) as any;
+
+// Employees
+export const hrEmployees = pgTable("hr_employees", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeNumber: text("employee_number").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  address: text("address"),
+  city: text("city"),
+  country: text("country").default("Kenya"),
+  dateOfBirth: timestamp("date_of_birth", { mode: "date" }),
+  gender: text("gender"),
+  maritalStatus: text("marital_status"),
+  emergencyContactName: text("emergency_contact_name"),
+  emergencyContactPhone: text("emergency_contact_phone"),
+  departmentId: text("department_id").references(() => hrDepartments as any, {
+    onDelete: "set null",
+  }),
+  positionId: text("position_id").references(() => hrPositions as any, {
+    onDelete: "set null",
+  }),
+  managerId: text("manager_id").references(() => hrEmployees as any, {
+    onDelete: "set null",
+  }),
+  employmentType: employmentTypeEnum("employment_type").notNull(),
+  status: employeeStatusEnum("status").default("active").notNull(),
+  hireDate: timestamp("hire_date", { mode: "date" }).notNull(),
+  terminationDate: timestamp("termination_date", { mode: "date" }),
+  probationEndDate: timestamp("probation_end_date", { mode: "date" }),
+  contractEndDate: timestamp("contract_end_date", { mode: "date" }),
+  salary: decimal("salary", { precision: 12, scale: 2 }),
+  currency: text("currency").default("KES").notNull(),
+  avatar: text("avatar"),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_employees_org_idx").on(table.organizationId),
+  userIdx: index("hr_employees_user_idx").on(table.userId),
+  numberIdx: uniqueIndex("unique_org_employee_number").on(table.organizationId, table.employeeNumber),
+  deptIdx: index("hr_employees_dept_idx").on(table.departmentId),
+  positionIdx: index("hr_employees_position_idx").on(table.positionId),
+  statusIdx: index("hr_employees_status_idx").on(table.status),
+})) as any;
+
+// Employment Contracts
+export const hrEmploymentContracts = pgTable("hr_employment_contracts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  contractNumber: text("contract_number").notNull(),
+  contractType: contractTypeEnum("contract_type").notNull(),
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }),
+  salary: decimal("salary", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").default("KES").notNull(),
+  benefits: jsonb("benefits").$type<Record<string, unknown>>().default({}),
+  terms: text("terms"),
+  status: text("status").default("active").notNull(),
+  signedAt: timestamp("signed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_contracts_org_idx").on(table.organizationId),
+  userIdx: index("hr_contracts_user_idx").on(table.userId),
+  employeeIdx: index("hr_contracts_employee_idx").on(table.employeeId),
+  numberIdx: uniqueIndex("unique_org_contract_number").on(table.organizationId, table.contractNumber),
+}));
+
+// Attendance Records
+export const hrAttendanceRecords = pgTable("hr_attendance_records", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  date: timestamp("date", { mode: "date" }).notNull(),
+  status: attendanceStatusEnum("status").notNull(),
+  clockIn: timestamp("clock_in", { mode: "date" }),
+  clockOut: timestamp("clock_out", { mode: "date" }),
+  breakMinutes: integer("break_minutes").default(0),
+  overtimeMinutes: integer("overtime_minutes").default(0),
+  notes: text("notes"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_attendance_org_idx").on(table.organizationId),
+  userIdx: index("hr_attendance_user_idx").on(table.userId),
+  employeeIdx: index("hr_attendance_employee_idx").on(table.employeeId),
+  dateIdx: index("hr_attendance_date_idx").on(table.date),
+  employeeDateIdx: uniqueIndex("unique_hr_attendance_employee_date").on(table.employeeId, table.date),
+}));
+
+// Leave Requests
+export const hrLeaveRequests = pgTable("hr_leave_requests", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  leaveType: leaveTypeEnum("leave_type").notNull(),
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }).notNull(),
+  days: decimal("days", { precision: 5, scale: 2 }).notNull(),
+  reason: text("reason"),
+  status: leaveStatusEnum("status").default("pending").notNull(),
+  approvedBy: text("approved_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  approvedAt: timestamp("approved_at", { mode: "date" }),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_leave_org_idx").on(table.organizationId),
+  userIdx: index("hr_leave_user_idx").on(table.userId),
+  employeeIdx: index("hr_leave_employee_idx").on(table.employeeId),
+  statusIdx: index("hr_leave_status_idx").on(table.status),
+}));
+
+// Leave Balances
+export const hrLeaveBalances = pgTable("hr_leave_balances", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  leaveType: leaveTypeEnum("leave_type").notNull(),
+  year: integer("year").notNull(),
+  totalDays: decimal("total_days", { precision: 5, scale: 2 }).notNull(),
+  usedDays: decimal("used_days", { precision: 5, scale: 2 }).default("0").notNull(),
+  carriedDays: decimal("carried_days", { precision: 5, scale: 2 }).default("0").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_leave_balances_org_idx").on(table.organizationId),
+  userIdx: index("hr_leave_balances_user_idx").on(table.userId),
+  employeeIdx: index("hr_leave_balances_employee_idx").on(table.employeeId),
+  employeeYearIdx: uniqueIndex("unique_hr_leave_balance").on(table.employeeId, table.leaveType, table.year),
+}));
+
+// Shifts
+export const hrShifts = pgTable("hr_shifts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  breakMinutes: integer("break_minutes").default(0),
+  color: text("color").default("#16a34a"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_shifts_org_idx").on(table.organizationId),
+  userIdx: index("hr_shifts_user_idx").on(table.userId),
+}));
+
+// Shift Assignments
+export const hrShiftAssignments = pgTable("hr_shift_assignments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  shiftId: text("shift_id")
+    .notNull()
+    .references(() => hrShifts.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  date: timestamp("date", { mode: "date" }).notNull(),
+  status: shiftStatusEnum("status").default("scheduled").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_shift_assignments_org_idx").on(table.organizationId),
+  userIdx: index("hr_shift_assignments_user_idx").on(table.userId),
+  shiftIdx: index("hr_shift_assignments_shift_idx").on(table.shiftId),
+  employeeIdx: index("hr_shift_assignments_employee_idx").on(table.employeeId),
+  dateIdx: index("hr_shift_assignments_date_idx").on(table.date),
+  employeeDateIdx: uniqueIndex("unique_hr_shift_assignment").on(table.employeeId, table.date),
+}));
+
+// Applicants
+export const hrApplicants = pgTable("hr_applicants", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  positionId: text("position_id").references(() => hrPositions.id, {
+    onDelete: "set null",
+  }),
+  departmentId: text("department_id").references(() => hrDepartments.id, {
+    onDelete: "set null",
+  }),
+  status: applicantStatusEnum("status").default("applied").notNull(),
+  resumeUrl: text("resume_url"),
+  coverLetter: text("cover_letter"),
+  expectedSalary: decimal("expected_salary", { precision: 12, scale: 2 }),
+  availabilityDate: timestamp("availability_date", { mode: "date" }),
+  source: text("source"),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  notes: text("notes"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_applicants_org_idx").on(table.organizationId),
+  userIdx: index("hr_applicants_user_idx").on(table.userId),
+  positionIdx: index("hr_applicants_position_idx").on(table.positionId),
+  statusIdx: index("hr_applicants_status_idx").on(table.status),
+}));
+
+// Applicant Documents
+export const hrApplicantDocuments = pgTable("hr_applicant_documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  applicantId: text("applicant_id")
+    .notNull()
+    .references(() => hrApplicants.id, { onDelete: "cascade" }),
+  documentType: documentTypeEnum("document_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_applicant_docs_org_idx").on(table.organizationId),
+  applicantIdx: index("hr_applicant_docs_applicant_idx").on(table.applicantId),
+}));
+
+// Onboarding Checklists
+export const hrOnboardingChecklists = pgTable("hr_onboarding_checklists", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  task: text("task").notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date", { mode: "date" }),
+  status: onboardingTaskStatusEnum("status").default("pending").notNull(),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_onboarding_org_idx").on(table.organizationId),
+  userIdx: index("hr_onboarding_user_idx").on(table.userId),
+  employeeIdx: index("hr_onboarding_employee_idx").on(table.employeeId),
+}));
+
+// Offboarding Records
+export const hrOffboardingRecords = pgTable("hr_offboarding_records", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  offboardingType: offboardingTypeEnum("offboarding_type").notNull(),
+  lastWorkingDate: timestamp("last_working_date", { mode: "date" }).notNull(),
+  reason: text("reason"),
+  noticePeriodDays: integer("notice_period_days"),
+  returnEquipment: jsonb("return_equipment").$type<Record<string, unknown>>().default({}),
+  exitInterviewNotes: text("exit_interview_notes"),
+  clearanceCompleted: boolean("clearance_completed").default(false).notNull(),
+  clearedAt: timestamp("cleared_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_offboarding_org_idx").on(table.organizationId),
+  userIdx: index("hr_offboarding_user_idx").on(table.userId),
+  employeeIdx: index("hr_offboarding_employee_idx").on(table.employeeId),
+}));
+
+// Performance Reviews
+export const hrPerformanceReviews = pgTable("hr_performance_reviews", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  reviewerId: text("reviewer_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  reviewPeriodStart: timestamp("review_period_start", { mode: "date" }).notNull(),
+  reviewPeriodEnd: timestamp("review_period_end", { mode: "date" }).notNull(),
+  overallRating: decimal("overall_rating", { precision: 3, scale: 1 }),
+  status: performanceReviewStatusEnum("status").default("draft").notNull(),
+  strengths: text("strengths"),
+  areasForImprovement: text("areas_for_improvement"),
+  goals: jsonb("goals").$type<Record<string, unknown>[]>().default([]),
+  comments: text("comments"),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_reviews_org_idx").on(table.organizationId),
+  userIdx: index("hr_reviews_user_idx").on(table.userId),
+  employeeIdx: index("hr_reviews_employee_idx").on(table.employeeId),
+  reviewerIdx: index("hr_reviews_reviewer_idx").on(table.reviewerId),
+  statusIdx: index("hr_reviews_status_idx").on(table.status),
+}));
+
+// Trainings
+export const hrTrainings = pgTable("hr_trainings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  trainer: text("trainer"),
+  location: text("location"),
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }).notNull(),
+  capacity: integer("capacity"),
+  cost: decimal("cost", { precision: 12, scale: 2 }).default("0"),
+  currency: text("currency").default("KES").notNull(),
+  status: trainingStatusEnum("status").default("scheduled").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_trainings_org_idx").on(table.organizationId),
+  userIdx: index("hr_trainings_user_idx").on(table.userId),
+  statusIdx: index("hr_trainings_status_idx").on(table.status),
+}));
+
+// Training Enrollments
+export const hrTrainingEnrollments = pgTable("hr_training_enrollments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  trainingId: text("training_id")
+    .notNull()
+    .references(() => hrTrainings.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  status: trainingStatusEnum("status").default("scheduled").notNull(),
+  score: decimal("score", { precision: 5, scale: 2 }),
+  feedback: text("feedback"),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_training_enrollments_org_idx").on(table.organizationId),
+  userIdx: index("hr_training_enrollments_user_idx").on(table.userId),
+  trainingIdx: index("hr_training_enrollments_training_idx").on(table.trainingId),
+  employeeIdx: index("hr_training_enrollments_employee_idx").on(table.employeeId),
+  trainingEmployeeIdx: uniqueIndex("unique_hr_training_enrollment").on(table.trainingId, table.employeeId),
+}));
+
+// Employee Documents
+export const hrEmployeeDocuments = pgTable("hr_employee_documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  employeeId: text("employee_id")
+    .notNull()
+    .references(() => hrEmployees.id, { onDelete: "cascade" }),
+  documentType: documentTypeEnum("document_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_employee_docs_org_idx").on(table.organizationId),
+  userIdx: index("hr_employee_docs_user_idx").on(table.userId),
+  employeeIdx: index("hr_employee_docs_employee_idx").on(table.employeeId),
+}));
+
+// Organization Chart
+export const hrOrganizationChart = pgTable("hr_organization_chart", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  nodeType: orgChartNodeTypeEnum("node_type").notNull(),
+  nodeId: text("node_id").notNull(),
+  parentNodeId: text("parent_node_id"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_org_chart_org_idx").on(table.organizationId),
+  userIdx: index("hr_org_chart_user_idx").on(table.userId),
+  nodeIdx: index("hr_org_chart_node_idx").on(table.nodeType, table.nodeId),
+  parentIdx: index("hr_org_chart_parent_idx").on(table.parentNodeId),
+}));
+
+// HR AI Insights
+export const hrAiInsights = pgTable("hr_ai_insights", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: aiHrInsightTypeEnum("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  priority: text("priority").default("normal").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().default({}),
+  read: boolean("read").default(false).notNull(),
+  dismissed: boolean("dismissed").default(false).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_ai_insights_org_idx").on(table.organizationId),
+  userIdx: index("hr_ai_insights_user_idx").on(table.userId),
+  typeIdx: index("hr_ai_insights_type_idx").on(table.type),
+}));
+
+// HR AI Reminders
+export const hrAiReminders = pgTable("hr_ai_reminders", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  reminderType: text("reminder_type").notNull(),
+  dueDate: timestamp("due_date", { mode: "date" }).notNull(),
+  relatedResourceType: text("related_resource_type"),
+  relatedResourceId: text("related_resource_id"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  sent: boolean("sent").default(false).notNull(),
+  sentAt: timestamp("sent_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("hr_ai_reminders_org_idx").on(table.organizationId),
+  userIdx: index("hr_ai_reminders_user_idx").on(table.userId),
+  dueIdx: index("hr_ai_reminders_due_idx").on(table.dueDate),
+}));
+
+// ── HR relations ───────────────────────────────────────────────────────────────
+
+export const hrDepartmentsRelations = relations(hrDepartments, ({ one, many }) => ({
+  user: one(users, { fields: [hrDepartments.userId], references: [users.id] }),
+  parent: one(hrDepartments, {
+    fields: [hrDepartments.parentDepartmentId],
+    references: [hrDepartments.id],
+  }),
+  children: many(hrDepartments),
+  positions: many(hrPositions),
+  employees: many(hrEmployees),
+  manager: one(hrEmployees, {
+    fields: [hrDepartments.managerId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrPositionsRelations = relations(hrPositions, ({ one, many }) => ({
+  user: one(users, { fields: [hrPositions.userId], references: [users.id] }),
+  department: one(hrDepartments, {
+    fields: [hrPositions.departmentId],
+    references: [hrDepartments.id],
+  }),
+  reportsTo: one(hrPositions, {
+    fields: [hrPositions.reportsToPositionId],
+    references: [hrPositions.id],
+  }),
+  employees: many(hrEmployees),
+  applicants: many(hrApplicants),
+}));
+
+export const hrEmployeesRelations = relations(hrEmployees, ({ one, many }) => ({
+  user: one(users, { fields: [hrEmployees.userId], references: [users.id] }),
+  department: one(hrDepartments, {
+    fields: [hrEmployees.departmentId],
+    references: [hrDepartments.id],
+  }),
+  position: one(hrPositions, {
+    fields: [hrEmployees.positionId],
+    references: [hrPositions.id],
+  }),
+  manager: one(hrEmployees, {
+    fields: [hrEmployees.managerId],
+    references: [hrEmployees.id],
+  }),
+  contracts: many(hrEmploymentContracts),
+  attendanceRecords: many(hrAttendanceRecords),
+  leaveRequests: many(hrLeaveRequests),
+  leaveBalances: many(hrLeaveBalances),
+  shiftAssignments: many(hrShiftAssignments),
+  performanceReviews: many(hrPerformanceReviews),
+  trainingEnrollments: many(hrTrainingEnrollments),
+  documents: many(hrEmployeeDocuments),
+  onboardingChecklists: many(hrOnboardingChecklists),
+  offboardingRecords: many(hrOffboardingRecords),
+  directReports: many(hrEmployees),
+}));
+
+export const hrEmploymentContractsRelations = relations(hrEmploymentContracts, ({ one }) => ({
+  user: one(users, { fields: [hrEmploymentContracts.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrEmploymentContracts.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrAttendanceRecordsRelations = relations(hrAttendanceRecords, ({ one }) => ({
+  user: one(users, { fields: [hrAttendanceRecords.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrAttendanceRecords.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrLeaveRequestsRelations = relations(hrLeaveRequests, ({ one }) => ({
+  user: one(users, { fields: [hrLeaveRequests.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrLeaveRequests.employeeId],
+    references: [hrEmployees.id],
+  }),
+  approver: one(users, {
+    fields: [hrLeaveRequests.approvedBy],
+    references: [users.id],
+  }),
+}));
+
+export const hrLeaveBalancesRelations = relations(hrLeaveBalances, ({ one }) => ({
+  user: one(users, { fields: [hrLeaveBalances.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrLeaveBalances.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrShiftsRelations = relations(hrShifts, ({ one, many }) => ({
+  user: one(users, { fields: [hrShifts.userId], references: [users.id] }),
+  assignments: many(hrShiftAssignments),
+}));
+
+export const hrShiftAssignmentsRelations = relations(hrShiftAssignments, ({ one }) => ({
+  user: one(users, { fields: [hrShiftAssignments.userId], references: [users.id] }),
+  shift: one(hrShifts, {
+    fields: [hrShiftAssignments.shiftId],
+    references: [hrShifts.id],
+  }),
+  employee: one(hrEmployees, {
+    fields: [hrShiftAssignments.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrApplicantsRelations = relations(hrApplicants, ({ one, many }) => ({
+  user: one(users, { fields: [hrApplicants.userId], references: [users.id] }),
+  position: one(hrPositions, {
+    fields: [hrApplicants.positionId],
+    references: [hrPositions.id],
+  }),
+  department: one(hrDepartments, {
+    fields: [hrApplicants.departmentId],
+    references: [hrDepartments.id],
+  }),
+  documents: many(hrApplicantDocuments),
+}));
+
+export const hrApplicantDocumentsRelations = relations(hrApplicantDocuments, ({ one }) => ({
+  applicant: one(hrApplicants, {
+    fields: [hrApplicantDocuments.applicantId],
+    references: [hrApplicants.id],
+  }),
+}));
+
+export const hrOnboardingChecklistsRelations = relations(hrOnboardingChecklists, ({ one }) => ({
+  user: one(users, { fields: [hrOnboardingChecklists.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrOnboardingChecklists.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrOffboardingRecordsRelations = relations(hrOffboardingRecords, ({ one }) => ({
+  user: one(users, { fields: [hrOffboardingRecords.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrOffboardingRecords.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrPerformanceReviewsRelations = relations(hrPerformanceReviews, ({ one }) => ({
+  user: one(users, { fields: [hrPerformanceReviews.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrPerformanceReviews.employeeId],
+    references: [hrEmployees.id],
+  }),
+  reviewer: one(users, {
+    fields: [hrPerformanceReviews.reviewerId],
+    references: [users.id],
+  }),
+}));
+
+export const hrTrainingsRelations = relations(hrTrainings, ({ one, many }) => ({
+  user: one(users, { fields: [hrTrainings.userId], references: [users.id] }),
+  enrollments: many(hrTrainingEnrollments),
+}));
+
+export const hrTrainingEnrollmentsRelations = relations(hrTrainingEnrollments, ({ one }) => ({
+  user: one(users, { fields: [hrTrainingEnrollments.userId], references: [users.id] }),
+  training: one(hrTrainings, {
+    fields: [hrTrainingEnrollments.trainingId],
+    references: [hrTrainings.id],
+  }),
+  employee: one(hrEmployees, {
+    fields: [hrTrainingEnrollments.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrEmployeeDocumentsRelations = relations(hrEmployeeDocuments, ({ one }) => ({
+  user: one(users, { fields: [hrEmployeeDocuments.userId], references: [users.id] }),
+  employee: one(hrEmployees, {
+    fields: [hrEmployeeDocuments.employeeId],
+    references: [hrEmployees.id],
+  }),
+}));
+
+export const hrOrganizationChartRelations = relations(hrOrganizationChart, ({ one }) => ({
+  user: one(users, { fields: [hrOrganizationChart.userId], references: [users.id] }),
+}));
+
+export const hrAiInsightsRelations = relations(hrAiInsights, ({ one }) => ({
+  user: one(users, { fields: [hrAiInsights.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [hrAiInsights.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const hrAiRemindersRelations = relations(hrAiReminders, ({ one }) => ({
+  user: one(users, { fields: [hrAiReminders.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [hrAiReminders.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 // ── Procurement relations ──────────────────────────────────────────────────────
 
 export const procurementPurchaseRequestsRelations = relations(
@@ -4311,9 +5283,49 @@ export type PosPaymentStatus = (typeof posPaymentStatusEnum.enumValues)[number];
 export type PosSessionStatus = (typeof posSessionStatusEnum.enumValues)[number];
 export type PosReturnReason = (typeof posReturnReasonEnum.enumValues)[number];
 
+// POS Types
 export type PosSession = typeof posSessions.$inferSelect;
 export type PosOrder = typeof posOrders.$inferSelect;
 export type PosOrderItem = typeof posOrderItems.$inferSelect;
 export type PosOrderPayment = typeof posOrderPayments.$inferSelect;
 export type PosReturn = typeof posReturns.$inferSelect;
 export type PosReturnItem = typeof posReturnItems.$inferSelect;
+
+// ── HR types ───────────────────────────────────────────────────────────────────
+export type HrDepartment = typeof hrDepartments.$inferSelect;
+export type HrPosition = typeof hrPositions.$inferSelect;
+export type HrEmployee = typeof hrEmployees.$inferSelect;
+export type HrEmploymentContract = typeof hrEmploymentContracts.$inferSelect;
+export type HrAttendanceRecord = typeof hrAttendanceRecords.$inferSelect;
+export type HrLeaveRequest = typeof hrLeaveRequests.$inferSelect;
+export type HrLeaveBalance = typeof hrLeaveBalances.$inferSelect;
+export type HrShift = typeof hrShifts.$inferSelect;
+export type HrShiftAssignment = typeof hrShiftAssignments.$inferSelect;
+export type HrApplicant = typeof hrApplicants.$inferSelect;
+export type HrApplicantDocument = typeof hrApplicantDocuments.$inferSelect;
+export type HrOnboardingChecklist = typeof hrOnboardingChecklists.$inferSelect;
+export type HrOffboardingRecord = typeof hrOffboardingRecords.$inferSelect;
+export type HrPerformanceReview = typeof hrPerformanceReviews.$inferSelect;
+export type HrTraining = typeof hrTrainings.$inferSelect;
+export type HrTrainingEnrollment = typeof hrTrainingEnrollments.$inferSelect;
+export type HrEmployeeDocument = typeof hrEmployeeDocuments.$inferSelect;
+export type HrOrganizationChart = typeof hrOrganizationChart.$inferSelect;
+export type HrAiInsight = typeof hrAiInsights.$inferSelect;
+export type HrAiReminder = typeof hrAiReminders.$inferSelect;
+
+// HR enums (TypeScript unions)
+export type EmployeeStatus = (typeof employeeStatusEnum.enumValues)[number];
+export type EmploymentType = (typeof employmentTypeEnum.enumValues)[number];
+export type ContractType = (typeof contractTypeEnum.enumValues)[number];
+export type LeaveType = (typeof leaveTypeEnum.enumValues)[number];
+export type LeaveStatus = (typeof leaveStatusEnum.enumValues)[number];
+export type AttendanceStatus = (typeof attendanceStatusEnum.enumValues)[number];
+export type ShiftStatus = (typeof shiftStatusEnum.enumValues)[number];
+export type ApplicantStatus = (typeof applicantStatusEnum.enumValues)[number];
+export type OnboardingTaskStatus = (typeof onboardingTaskStatusEnum.enumValues)[number];
+export type OffboardingType = (typeof offboardingTypeEnum.enumValues)[number];
+export type PerformanceReviewStatus = (typeof performanceReviewStatusEnum.enumValues)[number];
+export type TrainingStatus = (typeof trainingStatusEnum.enumValues)[number];
+export type DocumentType = (typeof documentTypeEnum.enumValues)[number];
+export type OrgChartNodeType = (typeof orgChartNodeTypeEnum.enumValues)[number];
+export type AiHrInsightType = (typeof aiHrInsightTypeEnum.enumValues)[number];

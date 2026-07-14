@@ -99,7 +99,22 @@ export type PermissionKey =
   | "pos.sales.view"
   | "pos.returns"
   | "pos.shift.manage"
-  | "pos.settings.manage";
+  | "pos.settings.manage"
+  | "hr.view"
+  | "hr.employees.manage"
+  | "hr.departments.manage"
+  | "hr.positions.manage"
+  | "hr.attendance.manage"
+  | "hr.leave.manage"
+  | "hr.shifts.manage"
+  | "hr.recruitment.manage"
+  | "hr.onboarding.manage"
+  | "hr.offboarding.manage"
+  | "hr.performance.manage"
+  | "hr.training.manage"
+  | "hr.documents.manage"
+  | "hr.reports.view"
+  | "hr.ai.access";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -221,6 +236,22 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "pos.returns": { key: "pos.returns", category: "pos", name: "Process Returns", description: "Process returns and refunds at POS" },
   "pos.shift.manage": { key: "pos.shift.manage", category: "pos", name: "Manage Shifts", description: "Open and close cashier shifts/sessions" },
   "pos.settings.manage": { key: "pos.settings.manage", category: "pos", name: "Manage POS Settings", description: "Configure POS terminals, printers, and payment methods" },
+
+  "hr.view": { key: "hr.view", category: "hr", name: "View HR", description: "View HR dashboard and employee records" },
+  "hr.employees.manage": { key: "hr.employees.manage", category: "hr", name: "Manage Employees", description: "Create, edit, and manage employee records" },
+  "hr.departments.manage": { key: "hr.departments.manage", category: "hr", name: "Manage Departments", description: "Create and manage departments" },
+  "hr.positions.manage": { key: "hr.positions.manage", category: "hr", name: "Manage Positions", description: "Create and manage job positions" },
+  "hr.attendance.manage": { key: "hr.attendance.manage", category: "hr", name: "Manage Attendance", description: "Track and manage employee attendance" },
+  "hr.leave.manage": { key: "hr.leave.manage", category: "hr", name: "Manage Leave", description: "Approve and manage leave requests" },
+  "hr.shifts.manage": { key: "hr.shifts.manage", category: "hr", name: "Manage Shifts", description: "Create and assign work shifts" },
+  "hr.recruitment.manage": { key: "hr.recruitment.manage", category: "hr", name: "Manage Recruitment", description: "Manage applicants and recruitment pipeline" },
+  "hr.onboarding.manage": { key: "hr.onboarding.manage", category: "hr", name: "Manage Onboarding", description: "Manage employee onboarding checklists" },
+  "hr.offboarding.manage": { key: "hr.offboarding.manage", category: "hr", name: "Manage Offboarding", description: "Manage employee offboarding and exits" },
+  "hr.performance.manage": { key: "hr.performance.manage", category: "hr", name: "Manage Performance", description: "Manage performance reviews and appraisals" },
+  "hr.training.manage": { key: "hr.training.manage", category: "hr", name: "Manage Training", description: "Create and manage training programs" },
+  "hr.documents.manage": { key: "hr.documents.manage", category: "hr", name: "Manage Documents", description: "Manage employee documents and files" },
+  "hr.reports.view": { key: "hr.reports.view", category: "hr", name: "View HR Reports", description: "View HR analytics and reports" },
+  "hr.ai.access": { key: "hr.ai.access", category: "hr", name: "Access HR AI", description: "Use AI HR insights and reminders" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -270,6 +301,29 @@ const INTEGRATION_PERMS: PermissionKey[] = [
   "integrations.etims",
   "integrations.mpesa",
   "integrations.stripe",
+];
+
+const HR_PERMS: PermissionKey[] = [
+  "hr.view",
+  "hr.employees.manage",
+  "hr.departments.manage",
+  "hr.positions.manage",
+  "hr.attendance.manage",
+  "hr.leave.manage",
+  "hr.shifts.manage",
+  "hr.recruitment.manage",
+  "hr.onboarding.manage",
+  "hr.offboarding.manage",
+  "hr.performance.manage",
+  "hr.training.manage",
+  "hr.documents.manage",
+  "hr.reports.view",
+  "hr.ai.access",
+];
+
+const HR_VIEW_PERMS: PermissionKey[] = [
+  "hr.view",
+  "hr.reports.view",
 ];
 
 /**
@@ -347,6 +401,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "pos.returns",
     "pos.shift.manage",
     "pos.settings.manage",
+    ...HR_PERMS,
   ],
 
   accountant: [
@@ -495,6 +550,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "tasks.view",
     "tasks.create",
     "tasks.edit",
+    "hr.view",
+    "hr.ai.access",
   ],
 
   viewer: [
@@ -513,6 +570,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "notifications.view",
     "timeline.view",
     "tasks.view",
+    ...HR_VIEW_PERMS,
   ],
 };
 

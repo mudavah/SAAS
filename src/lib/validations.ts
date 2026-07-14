@@ -712,3 +712,232 @@ export type PosPaymentInput = z.infer<typeof posPaymentSchema>;
 export type PosReturnInput = z.infer<typeof posReturnSchema>;
 export type PosSessionInput = z.infer<typeof posSessionSchema>;
 export type PosSessionCloseInput = z.infer<typeof posSessionCloseSchema>;
+
+// ── Human Resource Management (Epic 5) ────────────────────────────────────────
+
+const employmentTypeValues = ["permanent", "contract", "part_time", "intern", "casual"] as const;
+const contractTypeValues = ["permanent", "fixed_term", "probation", "internship"] as const;
+const leaveTypeValues = ["annual", "sick", "maternity", "paternity", "compassionate", "unpaid", "study"] as const;
+const leaveStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
+const attendanceStatusValues = ["present", "absent", "late", "half_day", "on_leave"] as const;
+const shiftStatusValues = ["scheduled", "active", "completed", "cancelled"] as const;
+const applicantStatusValues = ["applied", "screening", "interview", "offer", "hired", "rejected"] as const;
+const onboardingTaskStatusValues = ["pending", "in_progress", "completed", "skipped"] as const;
+const offboardingTypeValues = ["resignation", "termination", "retirement", "contract_end"] as const;
+const performanceReviewStatusValues = ["draft", "in_progress", "completed", "cancelled"] as const;
+const trainingStatusValues = ["scheduled", "in_progress", "completed", "cancelled"] as const;
+const documentTypeValues = ["id", "passport", "kra_pin", "nssf", "nhif", "contract", "certificate", "resume", "other"] as const;
+const orgChartNodeTypeValues = ["department", "position", "employee"] as const;
+const aiHrInsightTypeValues = ["turnover_risk", "leave_pattern", "training_gap", "attendance_anomaly", "performance_trend", "headcount_forecast"] as const;
+
+export const departmentSchema = z.object({
+  name: z.string().min(1, "Department name is required"),
+  description: z.string().optional(),
+  parentDepartmentId: z.string().optional(),
+  managerId: z.string().optional(),
+  costCenter: z.string().optional(),
+});
+
+export const positionSchema = z.object({
+  departmentId: z.string().min(1, "Department is required"),
+  title: z.string().min(1, "Position title is required"),
+  description: z.string().optional(),
+  employmentType: z.enum(employmentTypeValues),
+  contractType: z.enum(contractTypeValues).optional(),
+  salaryMin: z.coerce.number().min(0).optional(),
+  salaryMax: z.coerce.number().min(0).optional(),
+  currency: z.string().default("KES"),
+  reportsToPositionId: z.string().optional(),
+});
+
+export const employeeSchema = z.object({
+  employeeNumber: z.string().min(1, "Employee number is required"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email"),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().default("Kenya"),
+  dateOfBirth: z.coerce.date().optional(),
+  gender: z.string().optional(),
+  maritalStatus: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
+  departmentId: z.string().optional(),
+  positionId: z.string().optional(),
+  managerId: z.string().optional(),
+  employmentType: z.enum(employmentTypeValues),
+  status: z.enum(["active", "on_leave", "suspended", "terminated", "resigned"]).default("active"),
+  hireDate: z.coerce.date(),
+  terminationDate: z.coerce.date().optional(),
+  probationEndDate: z.coerce.date().optional(),
+  contractEndDate: z.coerce.date().optional(),
+  salary: z.coerce.number().min(0).optional(),
+  currency: z.string().default("KES"),
+});
+
+export const contractSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  contractNumber: z.string().min(1, "Contract number is required"),
+  contractType: z.enum(contractTypeValues),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date().optional(),
+  salary: z.coerce.number().min(0),
+  currency: z.string().default("KES"),
+  benefits: z.record(z.any()).optional(),
+  terms: z.string().optional(),
+});
+
+export const attendanceSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  date: z.coerce.date(),
+  status: z.enum(attendanceStatusValues),
+  clockIn: z.coerce.date().optional(),
+  clockOut: z.coerce.date().optional(),
+  breakMinutes: z.coerce.number().int().min(0).default(0),
+  overtimeMinutes: z.coerce.number().int().min(0).default(0),
+  notes: z.string().optional(),
+});
+
+export const leaveRequestSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  leaveType: z.enum(leaveTypeValues),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  days: z.coerce.number().positive("Days must be positive"),
+  reason: z.string().optional(),
+});
+
+export const leaveApprovalSchema = z.object({
+  status: z.enum(["approved", "rejected"]),
+  rejectionReason: z.string().optional(),
+});
+
+export const shiftSchema = z.object({
+  name: z.string().min(1, "Shift name is required"),
+  startTime: z.string().min(1, "Start time is required"),
+  endTime: z.string().min(1, "End time is required"),
+  breakMinutes: z.coerce.number().int().min(0).default(0),
+  color: z.string().default("#16a34a"),
+});
+
+export const shiftAssignmentSchema = z.object({
+  shiftId: z.string().min(1, "Shift is required"),
+  employeeId: z.string().min(1, "Employee is required"),
+  date: z.coerce.date(),
+  status: z.enum(shiftStatusValues).default("scheduled"),
+});
+
+export const applicantSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email"),
+  phone: z.string().optional(),
+  positionId: z.string().optional(),
+  departmentId: z.string().optional(),
+  resumeUrl: z.string().optional(),
+  coverLetter: z.string().optional(),
+  expectedSalary: z.coerce.number().min(0).optional(),
+  availabilityDate: z.coerce.date().optional(),
+  source: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const applicantStatusUpdateSchema = z.object({
+  status: z.enum(applicantStatusValues),
+});
+
+export const performanceReviewSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  reviewerId: z.string().optional(),
+  reviewPeriodStart: z.coerce.date(),
+  reviewPeriodEnd: z.coerce.date(),
+  overallRating: z.coerce.number().min(0).max(5).optional(),
+  strengths: z.string().optional(),
+  areasForImprovement: z.string().optional(),
+  goals: z.array(z.any()).optional(),
+  comments: z.string().optional(),
+});
+
+export const trainingSchema = z.object({
+  title: z.string().min(1, "Training title is required"),
+  description: z.string().optional(),
+  trainer: z.string().optional(),
+  location: z.string().optional(),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  capacity: z.coerce.number().int().min(1).optional(),
+  cost: z.coerce.number().min(0).default(0),
+  currency: z.string().default("KES"),
+});
+
+export const trainingEnrollmentSchema = z.object({
+  trainingId: z.string().min(1, "Training is required"),
+  employeeId: z.string().min(1, "Employee is required"),
+});
+
+export const onboardingChecklistSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  task: z.string().min(1, "Task is required"),
+  description: z.string().optional(),
+  dueDate: z.coerce.date().optional(),
+  status: z.enum(onboardingTaskStatusValues).default("pending"),
+});
+
+export const offboardingSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  offboardingType: z.enum(offboardingTypeValues),
+  lastWorkingDate: z.coerce.date(),
+  reason: z.string().optional(),
+  noticePeriodDays: z.coerce.number().int().min(0).optional(),
+  returnEquipment: z.record(z.any()).optional(),
+  exitInterviewNotes: z.string().optional(),
+});
+
+export const documentSchema = z.object({
+  employeeId: z.string().min(1, "Employee is required"),
+  documentType: z.enum(documentTypeValues),
+  fileName: z.string().min(1, "File name is required"),
+  fileUrl: z.string().min(1, "File URL is required"),
+  fileSize: z.coerce.number().int().min(0).optional(),
+  mimeType: z.string().optional(),
+  expiresAt: z.coerce.date().optional(),
+});
+
+export const aiInsightSchema = z.object({
+  type: z.enum(aiHrInsightTypeValues),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  priority: z.enum(["low", "normal", "high"]).default("normal"),
+  data: z.record(z.any()).optional(),
+});
+
+export const aiReminderSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  message: z.string().min(1, "Message is required"),
+  reminderType: z.string().min(1, "Reminder type is required"),
+  dueDate: z.coerce.date(),
+  relatedResourceType: z.string().optional(),
+  relatedResourceId: z.string().optional(),
+});
+
+export type DepartmentInput = z.infer<typeof departmentSchema>;
+export type PositionInput = z.infer<typeof positionSchema>;
+export type EmployeeInput = z.infer<typeof employeeSchema>;
+export type ContractInput = z.infer<typeof contractSchema>;
+export type AttendanceInput = z.infer<typeof attendanceSchema>;
+export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
+export type LeaveApprovalInput = z.infer<typeof leaveApprovalSchema>;
+export type ShiftInput = z.infer<typeof shiftSchema>;
+export type ShiftAssignmentInput = z.infer<typeof shiftAssignmentSchema>;
+export type ApplicantInput = z.infer<typeof applicantSchema>;
+export type ApplicantStatusUpdateInput = z.infer<typeof applicantStatusUpdateSchema>;
+export type PerformanceReviewInput = z.infer<typeof performanceReviewSchema>;
+export type TrainingInput = z.infer<typeof trainingSchema>;
+export type TrainingEnrollmentInput = z.infer<typeof trainingEnrollmentSchema>;
+export type OnboardingChecklistInput = z.infer<typeof onboardingChecklistSchema>;
+export type OffboardingInput = z.infer<typeof offboardingSchema>;
+export type DocumentInput = z.infer<typeof documentSchema>;
+export type AiInsightInput = z.infer<typeof aiInsightSchema>;
+export type AiReminderInput = z.infer<typeof aiReminderSchema>;

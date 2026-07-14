@@ -1,0 +1,26 @@
+ALTER TYPE "public"."audit_category" ADD VALUE 'hr';--> statement-breakpoint
+ALTER TYPE "public"."notification_category" ADD VALUE 'hr';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.employee.created';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.employee.updated';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.employee.terminated';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.employee.resigned';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.department.created';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.department.updated';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.position.created';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.position.updated';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.attendance.recorded';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.leave.requested';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.leave.approved';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.leave.rejected';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.shift.assigned';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.applicant.created';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.applicant.hired';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.applicant.rejected';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.onboarding.started';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.onboarding.completed';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.offboarding.started';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.offboarding.completed';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.performance.review.completed';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.training.completed';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.contract.created';--> statement-breakpoint
+ALTER TYPE "public"."timeline_event_type" ADD VALUE 'hr.contract.expired';

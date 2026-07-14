@@ -28,6 +28,7 @@ import { signOut, useSession } from "next-auth/react";
     Link2,
     Activity,
     Store,
+    Building2,
   } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,9 @@ const navItems = [
   { href: "/dashboard/compliance", label: "eTIMS", icon: Shield },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/team", label: "Team", icon: Users2 },
+  { href: "/dashboard/hr", label: "HR", icon: Users },
+  { href: "/dashboard/hr/employees", label: "Employees", icon: Users },
+  { href: "/dashboard/hr/departments", label: "Departments", icon: Building2 },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/audit", label: "Audit Logs", icon: FileSearch },
 ];
