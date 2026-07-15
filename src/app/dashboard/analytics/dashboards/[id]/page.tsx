@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,8 @@ interface Dashboard {
   widgets: Widget[];
 }
 
-export default function DashboardViewPage({ params }: { params: { id: string } }) {
+export default function DashboardViewPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -32,7 +33,7 @@ export default function DashboardViewPage({ params }: { params: { id: string } }
     async function load() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/analytics/dashboards/${params.id}`, { cache: "no-store" });
+        const res = await fetch(`/api/analytics/dashboards/${id}`, { cache: "no-store" });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Failed to load");
         setDashboard(json);
@@ -47,7 +48,7 @@ export default function DashboardViewPage({ params }: { params: { id: string } }
       }
     }
     load();
-  }, [params.id, toast]);
+  }, [id, toast]);
 
   if (loading) {
     return (

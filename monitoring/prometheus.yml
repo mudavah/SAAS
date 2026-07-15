@@ -1,0 +1,40 @@
+# Prometheus scrape config for KaziFlow.
+# Scrapes the in-process /api/metrics endpoint (Prometheus text format).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: kaziflow-prod
+
+scrape_configs:
+  - job_name: kaziflow
+    metrics_path: /api/metrics
+    scheme: https
+    static_configs:
+      - targets:
+          - app:3000
+        labels:
+          service: web
+    # The /api/metrics endpoint is unauthenticated by design; restrict access
+    # at the network layer (security group / VPC / sidecar).
+    relabel_configs:
+      - source_labels: [__scheme__]
+        target_label: scheme
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["db:9187"]   # postgres_exporter
+    metrics_path: /metrics
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis:9121"] # redis_exporter
+    metrics_path: /metrics
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]

@@ -1,0 +1,46 @@
+# Alert rules evaluated against KaziFlow's /api/metrics exposition.
+# Mirrors the SLO thresholds in src/lib/monitoring/alerts.ts.
+groups:
+  - name: kaziflow_slo
+    rules:
+      - alert: KaziFlowErrorRateHigh
+        expr: kaziflow_error_rate > 0.005
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KaziFlow API error rate above 0.5%"
+          description: "Error rate is {{ $value | humanizePercentage }} for 5m."
+
+      - alert: KaziFlowP95LatencyHigh
+        expr: kaziflow_api_latency_p95_ms > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "KaziFlow p95 API latency above 1000ms"
+          description: "p95 latency is {{ $value }}ms for 10m."
+
+      - alert: KaziFlowDbLatencyHigh
+        expr: kaziflow_db_query_time_avg_ms > 200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "KaziFlow average DB query time above 200ms"
+
+      - alert: KaziFlowCriticalAlertFiring
+        expr: kaziflow_alert{severity="critical"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KaziFlow critical alert firing: {{ $labels.id }}"
+
+      - alert: KaziFlowNoTraffic
+        expr: increase(kaziflow_requests_total[5m]) == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "KaziFlow received no traffic for 10m (possible outage)"

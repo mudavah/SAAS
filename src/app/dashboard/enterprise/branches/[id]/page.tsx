@@ -5,13 +5,14 @@ import { enterpriseBranches, branchMembers, branchPricing, branchTaxSettings, br
 import { eq, and, desc } from "drizzle-orm";
 import BranchDetailClient from "./client";
 
-export default async function BranchDetailPage({ params }: { params: { id: string } }) {
+export default async function BranchDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await getPageContext({ requiredPermission: "enterprise.view" });
   if (!ctx) notFound();
 
   const branch = await db.query.enterpriseBranches.findFirst({
     where: and(
-      eq(enterpriseBranches.id, params.id),
+      eq(enterpriseBranches.id, id),
       eq(enterpriseBranches.organizationId, ctx.organizationId)
     ),
   });
@@ -19,20 +20,20 @@ export default async function BranchDetailPage({ params }: { params: { id: strin
   if (!branch) notFound();
 
   const members = await db.query.branchMembers.findMany({
-    where: eq(branchMembers.branchId, params.id),
+    where: eq(branchMembers.branchId, id),
     with: { user: true },
   });
 
   const pricing = await db.query.branchPricing.findMany({
-    where: eq(branchPricing.branchId, params.id),
+    where: eq(branchPricing.branchId, id),
   });
 
   const taxes = await db.query.branchTaxSettings.findMany({
-    where: eq(branchTaxSettings.branchId, params.id),
+    where: eq(branchTaxSettings.branchId, id),
   });
 
   const performance = await db.query.branchPerformanceSnapshots.findMany({
-    where: eq(branchPerformanceSnapshots.branchId, params.id),
+    where: eq(branchPerformanceSnapshots.branchId, id),
     orderBy: [desc(branchPerformanceSnapshots.periodStart)],
     limit: 12,
   });

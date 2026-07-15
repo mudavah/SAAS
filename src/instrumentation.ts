@@ -11,11 +11,15 @@ export async function register(): Promise<void> {
   const [
     { registerGlobalErrorHandlers },
     { initErrorMonitoring },
+    { validateProductionEnv },
   ] = await Promise.all([
     import("@/lib/monitoring/middleware"),
     import("@/lib/error-monitoring"),
+    import("@/lib/config/env"),
   ]);
 
   registerGlobalErrorHandlers();
   await initErrorMonitoring();
+  // Non-fatal: logs a checklist of missing env keys; never throws.
+  validateProductionEnv();
 }

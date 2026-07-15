@@ -13,6 +13,8 @@ interface Window {
   resetAt: number;
 }
 
+import { createRedisRateLimitStore } from "./rate-limit-redis";
+
 /**
  * Storage adapter for rate-limit windows. Implement this against Redis /
  * Upstash to share limits across serverless instances and survive deploys.
@@ -45,9 +47,13 @@ const memoryStore: RateLimitStore = (() => {
   };
 })();
 
-// To wire Redis/Upstash, implement `RateLimitStore` above and assign it here,
-// e.g. `export const rateLimitStore: RateLimitStore = new RedisRateLimitStore();`
-export const rateLimitStore: RateLimitStore = memoryStore;
+// When REDIS_URL is configured the limit is shared across all server instances
+// and survives deploys. Otherwise the in-memory store is used (default). The
+// Redis store lazy-loads `ioredis` so it is never a hard build dependency and
+// degrades to fail-open if Redis is unreachable.
+export const rateLimitStore: RateLimitStore = process.env.REDIS_URL
+  ? createRedisRateLimitStore()
+  : memoryStore;
 
 export interface RateLimitResult {
   allowed: boolean;

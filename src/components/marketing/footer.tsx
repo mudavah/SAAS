@@ -38,6 +38,11 @@ export function Footer() {
                   Sign Up
                 </Link>
               </li>
+              <li>
+                <Link href="/help" className="hover:text-foreground">
+                  Help Center
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -52,6 +57,11 @@ export function Footer() {
               <li>
                 <Link href="/terms" className="hover:text-foreground">
                   Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link href="/cookie-policy" className="hover:text-foreground">
+                  Cookie Policy
                 </Link>
               </li>
             </ul>
