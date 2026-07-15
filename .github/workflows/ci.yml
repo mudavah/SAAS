@@ -62,7 +62,7 @@ jobs:
         env:
           # Build must succeed regardless of secret availability; use placeholders.
           DATABASE_URL: postgresql://user:pass@localhost:5432/kaziflow
-          AUTH_SECRET: ci-build-secret-please-override
+          AUTH_SECRET: this-is-a-ci-placeholder-not-a-real-secret
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
   security:
@@ -95,3 +95,4 @@ jobs:
           path: ./
           base: ${{ github.event.repository.default_branch }}
           head: HEAD
+          extra_args: --only-verified

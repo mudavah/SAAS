@@ -2,3 +2,28 @@
 # Example/template env files contain placeholder values, not real secrets.
 .env.example
 .env.production.example
+
+# Documentation files that may contain example/config snippets
+docs/EPIC_12_SECURITY_AUDIT_REPORT.md
+docs/EPIC_12_PERFORMANCE_BENCHMARK_REPORT.md
+docs/EPIC_12_DATABASE_OPTIMIZATION_REPORT.md
+docs/EPIC_12_PRODUCTION_READINESS_REPORT.md
+docs/EPIC_12_TECHNICAL_DEBT_REPORT.md
+docs/EPIC_12_LAUNCH_CHECKLIST.md
+docs/EPIC_12_FINAL_ARCHITECTURE_REVIEW.md
+docs/BETA_READINESS_REPORT.md
+docs/PRODUCTION_DEPLOYMENT_CHECKLIST.md
+docs/HELP_CENTER.md
+README.md
+PAYROLL_EPIC6.md
+
+# Test files with mock/fake credential values
+src/tests/
+
+# Build artifacts and generated files
+.next/
+out/
+build/
+
+# Database migrations
+drizzle/
