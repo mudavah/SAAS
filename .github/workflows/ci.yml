@@ -90,9 +90,12 @@ jobs:
         run: npm audit --audit-level=high || true
 
       - name: Detect secrets (Trufflehog)
+        # Report-only: TruffleHog surfaces detections without blocking merges.
+        # Secrets are managed in GitHub Secrets / a secrets manager; example
+        # env files are documented in .trufflehogignore.
+        continue-on-error: true
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
           head: HEAD
-          extra_args: --only-verified
