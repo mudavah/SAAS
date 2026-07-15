@@ -1,0 +1,4 @@
+# TruffleHog ignore list
+# Example/template env files contain placeholder values, not real secrets.
+.env.example
+.env.production.example

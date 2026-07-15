@@ -14,7 +14,7 @@ if (!databaseUrl || databaseUrl.includes("@host:")) {
       "",
       "1. Create a free database at https://neon.tech or https://supabase.com",
       "2. Copy the PostgreSQL connection string into .env.local:",
-      '   DATABASE_URL=postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require',
+      '   DATABASE_URL=postgresql://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/REPLACE_WITH_DB_NAME?sslmode=require',
       "3. Run: npm run db:push",
     ].join("\n")
   );

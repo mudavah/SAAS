@@ -51,7 +51,7 @@ cp .env.example .env.local
 
 **Required for basic dev:**
 ```env
-DATABASE_URL=postgresql://user:pass@host:5432/kaziflow
+DATABASE_URL=postgresql://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/kaziflow
 AUTH_SECRET=your-secret-here  # openssl rand -base64 32
 AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_APP_URL=http://localhost:3000
