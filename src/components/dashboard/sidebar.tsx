@@ -52,6 +52,10 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/timeline", label: "Timeline", icon: Activity },
+  { href: "/dashboard/integrations", label: "Integration Hub", icon: Link2 },
+  { href: "/dashboard/integrations/marketplace", label: "Marketplace", icon: Store },
+  { href: "/dashboard/integrations/health", label: "Integration Health", icon: Activity },
+  { href: "/dashboard/integrations/activity", label: "Integration Activity", icon: History },
   { href: "/dashboard/invoices", label: "Invoices", icon: FileText },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
@@ -90,6 +94,9 @@ const navItems = [
   { href: "/dashboard/payroll/portal", label: "My Payslips", icon: UserCircle },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/audit", label: "Audit Logs", icon: FileSearch },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Link2 },
+  { href: "/dashboard/integrations/marketplace", label: "Marketplace", icon: Store },
+  { href: "/dashboard/integrations/health", label: "Integration Health", icon: Activity },
   {
     href: "/dashboard/enterprise",
     label: "Enterprise",

@@ -151,6 +151,56 @@ export const interBranchSaleStatusEnum = pgEnum("inter_branch_sale_status", [
   "cancelled",
 ]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration Hub enums (Epic 11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const integrationCategoryEnum = pgEnum("integration_category", [
+  "government",
+  "payment",
+  "email",
+  "sms",
+  "whatsapp",
+  "push",
+  "calendar",
+  "accounting",
+  "storage",
+  "hardware",
+]);
+
+export const integrationStatusEnum = pgEnum("integration_status", [
+  "connected",
+  "disconnected",
+  "pending",
+  "error",
+  "expired",
+]);
+
+export const integrationAuthTypeEnum = pgEnum("integration_auth_type", [
+  "oauth2",
+  "api_key",
+  "basic",
+  "credentials",
+  "none",
+  "webhook",
+]);
+
+export const integrationHealthStatusEnum = pgEnum("integration_health_status", [
+  "healthy",
+  "degraded",
+  "down",
+  "unknown",
+]);
+
+export const integrationEventStatusEnum = pgEnum("integration_event_status", [
+  "pending",
+  "processing",
+  "success",
+  "failed",
+  "retrying",
+  "dead",
+]);
+
 // Inventory enums
 export const inventoryItemTypeEnum = pgEnum("inventory_item_type", [
   "product",
@@ -552,6 +602,20 @@ export const timelineEventTypeEnum = pgEnum("timeline_event_type", [
   "enterprise.approval_request.approved",
   "enterprise.approval_request.rejected",
   "enterprise.ai.insight.generated",
+  "integration.connected",
+  "integration.disconnected",
+  "integration.updated",
+  "integration.sync.started",
+  "integration.sync.completed",
+  "integration.sync.failed",
+  "integration.message.sent",
+  "integration.message.failed",
+  "integration.webhook.received",
+  "integration.health.degraded",
+  "integration.token.refreshed",
+  "integration.marketplace.installed",
+  "integration.ai.insights.generated",
+  "integration.error",
 ]);
 
 // Onboarding enums
@@ -3982,6 +4046,183 @@ export const branchPerformanceSnapshots = pgTable("branch_performance_snapshots"
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Integration Hub (Epic 11)
+// ─────────────────────────────────────────────────────────────────────────────
+// One connection per organization + provider (+ optional label). Secrets in
+// `credentials` are encrypted at rest via encryptSecret (enc::). `provider` is
+// stored as free text validated against the code catalog (catalog.ts) so the
+// marketplace stays extensible without migrations.
+
+export const integrations = pgTable("integrations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  category: integrationCategoryEnum("category").notNull(),
+  provider: text("provider").notNull(),
+  name: text("name").notNull(),
+  authType: integrationAuthTypeEnum("auth_type").notNull().default("api_key"),
+  status: integrationStatusEnum("status").notNull().default("pending"),
+  enabled: boolean("enabled").notNull().default(true),
+  environment: text("environment").notNull().default("production"),
+  config: jsonb("config").$type<Record<string, unknown>>().default({}),
+  credentials: jsonb("credentials").$type<Record<string, unknown>>().default({}),
+  scopes: jsonb("scopes").$type<string[]>().default([]),
+  healthStatus: integrationHealthStatusEnum("health_status").notNull().default("unknown"),
+  lastCheckedAt: timestamp("last_checked_at", { mode: "date" }),
+  lastSyncAt: timestamp("last_sync_at", { mode: "date" }),
+  errorMessage: text("error_message"),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  linkedConfigId: text("linked_config_id").references(() => paymentProviderConfigs.id, {
+    onDelete: "set null",
+  }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgProviderNameIdx: uniqueIndex("integrations_org_provider_name_idx").on(
+    table.organizationId,
+    table.provider,
+    table.name
+  ),
+  orgIdx: index("integrations_org_idx").on(table.organizationId),
+  orgCategoryIdx: index("integrations_org_category_idx").on(table.organizationId, table.category),
+  orgStatusIdx: index("integrations_org_status_idx").on(table.organizationId, table.status),
+  orgHealthIdx: index("integrations_org_health_idx").on(table.organizationId, table.healthStatus),
+}));
+
+/** Encrypted OAuth token lifecycle. Tokens encrypted via encryptSecret. */
+export const integrationOauthTokens = pgTable("integration_oauth_tokens", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  integrationId: text("integration_id")
+    .notNull()
+    .references(() => integrations.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenType: text("token_type").default("Bearer"),
+  scope: text("scope"),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  integrationIdx: index("integration_oauth_tokens_integration_idx").on(table.integrationId),
+  orgIdx: index("integration_oauth_tokens_org_idx").on(table.organizationId),
+}));
+
+/** Immutable per-operation activity log. */
+export const integrationActivityLogs = pgTable("integration_activity_logs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  integrationId: text("integration_id")
+    .notNull()
+    .references(() => integrations.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  provider: text("provider").notNull(),
+  action: text("action").notNull(),
+  status: text("status").notNull(),
+  message: text("message"),
+  detail: jsonb("detail").$type<Record<string, unknown>>().default({}),
+  latencyMs: integer("latency_ms"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  integrationIdx: index("integration_activity_logs_integration_idx").on(table.integrationId),
+  orgIdx: index("integration_activity_logs_org_idx").on(table.organizationId),
+  orgCreatedIdx: index("integration_activity_logs_org_created_idx").on(
+    table.organizationId,
+    table.createdAt
+  ),
+}));
+
+/** Outbound/inbound event queue with retry. */
+export const integrationEvents = pgTable("integration_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  integrationId: text("integration_id")
+    .notNull()
+    .references(() => integrations.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  direction: text("direction").notNull().default("outbound"),
+  type: text("type").notNull(),
+  status: integrationEventStatusEnum("status").notNull().default("pending"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  response: jsonb("response").$type<Record<string, unknown>>().default({}),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  nextRetryAt: timestamp("next_retry_at", { mode: "date" }),
+  processedAt: timestamp("processed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  integrationIdx: index("integration_events_integration_idx").on(table.integrationId),
+  orgIdx: index("integration_events_org_idx").on(table.organizationId),
+  statusIdx: index("integration_events_status_idx").on(table.status, table.nextRetryAt),
+}));
+
+/** Inbound webhook records. */
+export const integrationWebhookLogs = pgTable("integration_webhook_logs", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  integrationId: text("integration_id")
+    .notNull()
+    .references(() => integrations.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  event: text("event"),
+  verified: boolean("verified").notNull().default(false),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+  headers: jsonb("headers").$type<Record<string, unknown>>().default({}),
+  status: text("status").notNull().default("received"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  integrationIdx: index("integration_webhook_logs_integration_idx").on(table.integrationId),
+  orgIdx: index("integration_webhook_logs_org_idx").on(table.organizationId),
+  orgCreatedIdx: index("integration_webhook_logs_org_created_idx").on(
+    table.organizationId,
+    table.createdAt
+  ),
+}));
+
+/** Periodic health snapshots. */
+export const integrationHealthChecks = pgTable("integration_health_checks", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  integrationId: text("integration_id")
+    .notNull()
+    .references(() => integrations.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  status: integrationHealthStatusEnum("status").notNull().default("unknown"),
+  latencyMs: integer("latency_ms"),
+  detail: jsonb("detail").$type<Record<string, unknown>>().default({}),
+  checkedAt: timestamp("checked_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  integrationIdx: index("integration_health_checks_integration_idx").on(table.integrationId),
+  orgIdx: index("integration_health_checks_org_idx").on(table.organizationId),
+  checkedIdx: index("integration_health_checks_checked_idx").on(table.checkedAt),
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tenant scoping helper columns on existing business tables
 // ─────────────────────────────────────────────────────────────────────────────
 // `organizationId` is added to every business table so all data is isolated per
@@ -4096,6 +4337,86 @@ export const businessTimelineRelations = relations(businessTimeline, ({ one }) =
   user: one(users, {
     fields: [businessTimeline.userId],
     references: [users.id],
+  }),
+}));
+
+// Integration Hub relations
+export const integrationsRelations = relations(integrations, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [integrations.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [integrations.userId],
+    references: [users.id],
+  }),
+  linkedConfig: one(paymentProviderConfigs, {
+    fields: [integrations.linkedConfigId],
+    references: [paymentProviderConfigs.id],
+  }),
+  oauthTokens: many(integrationOauthTokens),
+  activityLogs: many(integrationActivityLogs),
+  events: many(integrationEvents),
+  webhookLogs: many(integrationWebhookLogs),
+  healthChecks: many(integrationHealthChecks),
+}));
+
+export const integrationOauthTokensRelations = relations(integrationOauthTokens, ({ one }) => ({
+  integration: one(integrations, {
+    fields: [integrationOauthTokens.integrationId],
+    references: [integrations.id],
+  }),
+  organization: one(organizations, {
+    fields: [integrationOauthTokens.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const integrationActivityLogsRelations = relations(integrationActivityLogs, ({ one }) => ({
+  integration: one(integrations, {
+    fields: [integrationActivityLogs.integrationId],
+    references: [integrations.id],
+  }),
+  organization: one(organizations, {
+    fields: [integrationActivityLogs.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [integrationActivityLogs.userId],
+    references: [users.id],
+  }),
+}));
+
+export const integrationEventsRelations = relations(integrationEvents, ({ one }) => ({
+  integration: one(integrations, {
+    fields: [integrationEvents.integrationId],
+    references: [integrations.id],
+  }),
+  organization: one(organizations, {
+    fields: [integrationEvents.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const integrationWebhookLogsRelations = relations(integrationWebhookLogs, ({ one }) => ({
+  integration: one(integrations, {
+    fields: [integrationWebhookLogs.integrationId],
+    references: [integrations.id],
+  }),
+  organization: one(organizations, {
+    fields: [integrationWebhookLogs.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const integrationHealthChecksRelations = relations(integrationHealthChecks, ({ one }) => ({
+  integration: one(integrations, {
+    fields: [integrationHealthChecks.integrationId],
+    references: [integrations.id],
+  }),
+  organization: one(organizations, {
+    fields: [integrationHealthChecks.organizationId],
+    references: [organizations.id],
   }),
 }));
 
@@ -7559,3 +7880,18 @@ export type BranchType = (typeof branchTypeEnum.enumValues)[number];
 export type BranchStatus = (typeof branchStatusEnum.enumValues)[number];
 export type TransferStatus = (typeof transferStatusEnum.enumValues)[number];
 export type InterBranchSaleStatus = (typeof interBranchSaleStatusEnum.enumValues)[number];
+
+// Integration Hub types
+export type Integration = typeof integrations.$inferSelect;
+export type IntegrationOauthToken = typeof integrationOauthTokens.$inferSelect;
+export type IntegrationActivityLog = typeof integrationActivityLogs.$inferSelect;
+export type IntegrationEvent = typeof integrationEvents.$inferSelect;
+export type IntegrationWebhookLog = typeof integrationWebhookLogs.$inferSelect;
+export type IntegrationHealthCheck = typeof integrationHealthChecks.$inferSelect;
+
+// Integration Hub enums (TypeScript unions)
+export type IntegrationCategory = (typeof integrationCategoryEnum.enumValues)[number];
+export type IntegrationStatus = (typeof integrationStatusEnum.enumValues)[number];
+export type IntegrationAuthType = (typeof integrationAuthTypeEnum.enumValues)[number];
+export type IntegrationHealthStatus = (typeof integrationHealthStatusEnum.enumValues)[number];
+export type IntegrationEventStatus = (typeof integrationEventStatusEnum.enumValues)[number];

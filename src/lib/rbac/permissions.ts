@@ -65,6 +65,10 @@ export type PermissionKey =
   | "integrations.etims"
   | "integrations.mpesa"
   | "integrations.stripe"
+  | "integrations.view"
+  | "integrations.manage"
+  | "integrations.sync"
+  | "integrations.logs.view"
   | "ai.access"
   | "ai.manage"
   | "automation.view"
@@ -230,6 +234,10 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "integrations.etims": { key: "integrations.etims", category: "integrations", name: "eTIMS Integration", description: "Manage KRA eTIMS integration" },
   "integrations.mpesa": { key: "integrations.mpesa", category: "integrations", name: "M-Pesa Integration", description: "Manage M-Pesa integration" },
   "integrations.stripe": { key: "integrations.stripe", category: "integrations", name: "Stripe Integration", description: "Manage Stripe integration" },
+  "integrations.view": { key: "integrations.view", category: "integrations", name: "View Integration Hub", description: "View the Integration Hub, connections, marketplace and health" },
+  "integrations.manage": { key: "integrations.manage", category: "integrations", name: "Manage Integrations", description: "Connect, disconnect and configure integrations" },
+  "integrations.sync": { key: "integrations.sync", category: "integrations", name: "Sync & Dispatch Integrations", description: "Trigger syncs and dispatch messages/tests via integrations" },
+  "integrations.logs.view": { key: "integrations.logs.view", category: "integrations", name: "View Integration Logs", description: "View integration activity and event logs" },
 
   "ai.access": { key: "ai.access", category: "ai", name: "Access AI Features", description: "Use AI assistant features" },
   "ai.manage": { key: "ai.manage", category: "ai", name: "Manage AI", description: "Manage AI configuration and limits" },
@@ -378,6 +386,10 @@ const INTEGRATION_PERMS: PermissionKey[] = [
   "integrations.etims",
   "integrations.mpesa",
   "integrations.stripe",
+  "integrations.view",
+  "integrations.manage",
+  "integrations.sync",
+  "integrations.logs.view",
 ];
 
 const HR_PERMS: PermissionKey[] = [
@@ -537,6 +549,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "approvals.view",
     "approvals.manage",
     "approvals.approve",
+    "integrations.view",
+    "integrations.manage",
+    "integrations.sync",
+    "integrations.logs.view",
   ],
 
   accountant: [
@@ -586,6 +602,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "automation.view",
     "approvals.view",
     "approvals.approve",
+    "integrations.view",
+    "integrations.sync",
+    "integrations.logs.view",
   ],
 
   inventory_manager: [
@@ -700,6 +719,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     ...PAYROLL_VIEW_PERMS,
     "automation.view",
     "approvals.view",
+    "integrations.view",
   ],
 
   viewer: [
@@ -722,6 +742,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     ...PAYROLL_VIEW_PERMS,
     "automation.view",
     "approvals.view",
+    "integrations.view",
   ],
 };
 
