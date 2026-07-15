@@ -1,5 +1,6 @@
 import type { PaymentProvider, PaymentOperationType, CreatePaymentInput, CreatePaymentResult, VerifyPaymentInput, VerifyPaymentResult, RefundInput, RefundResult, CheckStatusInput, CheckStatusResult, CancelPendingInput, CancelPendingResult, ProviderConfig, PaymentProviderType } from "../types";
 import { initiateStkPush, getMpesaAccessToken, validateMpesaConfig, MpesaError, parseMpesaCallback, isMpesaConfigured } from "@/lib/mpesa";
+import { fetchWithTimeout } from "@/lib/http";
 
 export class MpesaProvider implements PaymentProvider {
   readonly type: PaymentProviderType = "mpesa";
@@ -80,7 +81,7 @@ export class MpesaProvider implements PaymentProvider {
         const baseUrl = process.env.MPESA_ENV === "production"
           ? "https://api.safaricom.co.ke"
           : "https://sandbox.safaricom.co.ke";
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `${baseUrl}/mpesa/stkpushquery/v1/query`,
           {
             method: "POST",
@@ -96,6 +97,7 @@ export class MpesaProvider implements PaymentProvider {
               Timestamp: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
               CheckoutRequestID: input.checkoutRequestId,
             }),
+            timeoutMs: 15_000,
           }
         );
 
@@ -152,7 +154,7 @@ export class MpesaProvider implements PaymentProvider {
       const baseUrl = process.env.MPESA_ENV === "production"
         ? "https://api.safaricom.co.ke"
         : "https://sandbox.safaricom.co.ke";
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${baseUrl}/mpesa/stkpushquery/v1/cancel`,
         {
           method: "POST",
@@ -169,6 +171,7 @@ export class MpesaProvider implements PaymentProvider {
             CheckoutRequestID: input.reference || input.providerPaymentId,
             IdentifierType: "4",
           }),
+          timeoutMs: 15_000,
         }
       );
 
@@ -191,7 +194,7 @@ export class MpesaProvider implements PaymentProvider {
       const baseUrl = process.env.MPESA_ENV === "production"
         ? "https://api.safaricom.co.ke"
         : "https://sandbox.safaricom.co.ke";
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${baseUrl}/mpesa/b2c/v1/paymentreversal`,
         {
           method: "POST",
@@ -216,6 +219,7 @@ export class MpesaProvider implements PaymentProvider {
             Remarks: input.reason || "Refund",
             Occasion: input.reason || "Refund",
           }),
+          timeoutMs: 15_000,
         }
       );
 

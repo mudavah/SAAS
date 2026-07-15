@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Eye, Loader2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
@@ -51,7 +51,7 @@ export default function PayslipsPage() {
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [viewData, setViewData] = useState<Payslip | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/payroll/payslips");
@@ -62,11 +62,11 @@ export default function PayslipsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   async function sendPayslip(id: string) {
     setSending(id);

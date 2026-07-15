@@ -1,4 +1,5 @@
 import type { AiRequestInput } from "@/lib/validations";
+import { fetchWithTimeout } from "@/lib/http";
 
 const PROMPTS: Record<AiRequestInput["type"], string> = {
   invoice_description:
@@ -35,7 +36,7 @@ Tone: ${input.tone}. Keep responses concise and actionable.`;
 
   const userPrompt = `${PROMPTS[input.type]}\n\nContext: ${input.context}`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -50,6 +51,7 @@ Tone: ${input.tone}. Keep responses concise and actionable.`;
       max_tokens: 500,
       temperature: 0.7,
     }),
+    timeoutMs: 30_000,
   });
 
   if (!res.ok) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Bell, Check, Archive } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,9 @@ type Notification = {
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const unreadCount = useRef(0);
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  async function fetchNotifications() {
+  const fetchNotifications = useCallback(async () => {
     const res = await fetch("/api/notifications");
     const data = await res.json();
     if (data.notifications) {
@@ -31,9 +28,7 @@ export default function NotificationsPage() {
       unreadCount.current = data.notifications.filter((n: Notification) => !n.readAt).length;
     }
     setLoading(false);
-  }
-
-  const unreadCount = { current: 0 };
+  }, []);
 
   async function markRead(id: string) {
     await fetch("/api/notifications", {

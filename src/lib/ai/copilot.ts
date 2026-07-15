@@ -18,6 +18,7 @@ import {
 } from "@/db/schema";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { getCurrentMonth } from "@/lib/utils";
+import { fetchWithTimeout } from "@/lib/http";
 
 export interface OrgContext {
   invoicesThisMonth: number;
@@ -115,7 +116,7 @@ export async function callOpenAI(
     { role: "user", content: userMessage },
   ];
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -127,6 +128,7 @@ export async function callOpenAI(
       max_tokens: 800,
       temperature: 0.3,
     }),
+    timeoutMs: 30_000,
   });
 
   if (!res.ok) {

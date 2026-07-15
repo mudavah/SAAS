@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ArrowLeft, CheckCircle2, XCircle, Send } from "lucide-react";
@@ -58,17 +58,17 @@ export default function RequestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  function load() {
+  const load = useCallback(() => {
     setLoading(true);
     fetch(`/api/procurement/requests/${id}`)
       .then((r) => r.json())
       .then((data) => (data.error ? setReq(null) : setReq(data)))
       .finally(() => setLoading(false));
-  }
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   async function act(action: "submit" | "approve" | "reject") {
     setBusy(true);

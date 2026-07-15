@@ -1,8 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Emit a minimal standalone server so the Docker image stays small and boots
-  // fast in production (`node server.js`). `next start` still works as before.
   output: "standalone",
   eslint: {
     ignoreDuringBuilds: false,
@@ -16,8 +14,12 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
     ],
   },
-  // Don't leak the Next.js version header in production.
   poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "1mb",
+    },
+  },
   async headers() {
     return [
       {

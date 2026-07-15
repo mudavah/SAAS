@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2, BarChart3 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,12 +19,17 @@ export default function ReportsPage() {
   const [data, setData] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
     fetch("/api/procurement/reports")
       .then((r) => r.json())
       .then((d) => (d.error ? toast({ title: "Could not load reports", description: d.error, variant: "destructive" }) : setData(d)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [toast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (loading) return (<DashboardShell><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></DashboardShell>);
   if (!data) return (<DashboardShell><div className="text-center py-16"><p className="text-muted-foreground">No report data</p></div></DashboardShell>);

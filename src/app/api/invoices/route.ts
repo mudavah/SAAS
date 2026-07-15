@@ -10,24 +10,40 @@ import {
   type PlanType,
 } from "@/lib/utils";
 import { requireApiContext } from "@/lib/session";
-import { logAuditSafe } from "@/lib/audit";
-import { createNotification } from "@/lib/notifications";
-import { emitTimelineEvent } from "@/lib/timeline";
-import { dispatchBusinessEvent } from "@/lib/automation/engine";
+import { createInvoice } from "@/lib/invoices/service";
+import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
+import { getPagination } from "@/lib/pagination";
 import { logger } from "@/lib/logger";
+
+export async function OPTIONS(req: Request) {
+  return corsResponse(null, 204, req);
+}
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "invoices.view");
   if ("error" in res) return res.error;
   const { ctx } = res;
 
-  const rows = await db.query.invoices.findMany({
-    where: eq(invoices.organizationId, ctx.organizationId),
-    orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
-    with: { client: true, items: true },
+  const { page, limit, offset } = getPagination({
+    page: Number(new URL(req.url).searchParams.get("page")) || undefined,
+    limit: Number(new URL(req.url).searchParams.get("limit")) || undefined,
   });
 
-  return NextResponse.json(rows);
+  const [rows, total] = await Promise.all([
+    db.query.invoices.findMany({
+      where: eq(invoices.organizationId, ctx.organizationId),
+      orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
+      with: { client: true, items: true },
+      limit,
+      offset,
+    }),
+    Promise.resolve(0),
+  ]);
+
+  return NextResponse.json(
+    { data: rows, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } },
+    { headers: getCorsHeaders(req) }
+  );
 }
 
 export async function POST(req: Request) {
@@ -42,161 +58,23 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.errors[0].message },
-        { status: 400 }
+        { status: 400, headers: getCorsHeaders(req) }
       );
     }
 
-    const plan = (ctx.organization.plan || "free") as PlanType;
-    const limits = PLAN_LIMITS[plan];
-
-    if (limits.invoicesPerMonth !== Infinity) {
-      const month = getCurrentMonth();
-      const usage = await db.query.usageRecords.findFirst({
-        where: and(
-          eq(usageRecords.organizationId, ctx.organizationId),
-          eq(usageRecords.month, month)
-        ),
-      });
-
-      if (usage && usage.invoicesCreated >= limits.invoicesPerMonth) {
-        return NextResponse.json(
-          {
-            error: `Free plan limit reached (${limits.invoicesPerMonth} invoices/month). Upgrade to Pro.`,
-          },
-          { status: 403 }
-        );
-      }
-    }
-
     const { items, ...invoiceData } = parsed.data;
-
-    // Validate that any referenced client belongs to this organization to
-    // prevent linking an invoice to another tenant's client.
-    if (invoiceData.clientId) {
-      const client = await db.query.clients.findFirst({
-        where: and(
-          eq(clients.id, invoiceData.clientId),
-          eq(clients.organizationId, ctx.organizationId)
-        ),
-        columns: { id: true },
-      });
-      if (!client) {
-        return NextResponse.json(
-          { error: "Client not found" },
-          { status: 404 }
-        );
-      }
-    }
-
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0
-    );
-    const taxAmount = subtotal * (invoiceData.taxRate / 100);
-    const total = subtotal + taxAmount;
-
-    const [invoice] = await db
-      .insert(invoices)
-      .values({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId!,
-        clientId: invoiceData.clientId || null,
-        invoiceNumber: generateInvoiceNumber(),
-        issueDate: invoiceData.issueDate,
-        dueDate: invoiceData.dueDate,
-        currency: invoiceData.currency,
-        subtotal: subtotal.toFixed(2),
-        taxRate: invoiceData.taxRate.toFixed(2),
-        taxAmount: taxAmount.toFixed(2),
-        total: total.toFixed(2),
-        notes: invoiceData.notes,
-        terms: invoiceData.terms,
-        status: body.send ? "sent" : "draft",
-        sentAt: body.send ? new Date() : null,
-      })
-      .returning();
-
-    await db.insert(invoiceItems).values(
-      items.map((item, index) => ({
-        invoiceId: invoice.id,
-        description: item.description,
-        quantity: item.quantity.toFixed(2),
-        unitPrice: item.unitPrice.toFixed(2),
-        amount: (item.quantity * item.unitPrice).toFixed(2),
-        sortOrder: index,
-      }))
-    );
-
-    const month = getCurrentMonth();
-    const existingUsage = await db.query.usageRecords.findFirst({
-      where: and(
-        eq(usageRecords.organizationId, ctx.organizationId),
-        eq(usageRecords.month, month)
-      ),
+    const result = await createInvoice(ctx, {
+      ...invoiceData,
+      items,
+      send: (body as { send?: boolean }).send,
     });
 
-    if (existingUsage) {
-      await db
-        .update(usageRecords)
-        .set({ invoicesCreated: existingUsage.invoicesCreated + 1 })
-        .where(eq(usageRecords.id, existingUsage.id));
-    } else {
-      await db.insert(usageRecords).values({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId!,
-        month,
-        invoicesCreated: 1,
-      });
-    }
-
-    await logAuditSafe(ctx, {
-      action: "invoice.create",
-      category: "invoices",
-      resourceType: "invoice",
-      resourceId: invoice.id,
-      description: `Created invoice ${invoice.invoiceNumber}`,
-      newValues: { invoiceNumber: invoice.invoiceNumber, total: invoice.total },
-    });
-
-    await createNotification({
-      organizationId: ctx.organizationId,
-      category: "invoices",
-      type: "invoice_created",
-      title: "Invoice created",
-      message: `Invoice ${invoice.invoiceNumber} was created${body.send ? " and sent" : ""}.`,
-      priority: "normal",
-      deepLink: `/dashboard/invoices/${invoice.id}`,
-    });
-
-    try {
-      await emitTimelineEvent({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-        eventType: "invoice.created",
-        title: `Invoice ${invoice.invoiceNumber} created`,
-        description: `Total ${invoice.currency} ${invoice.total}${body.send ? " · sent to client" : ""}`,
-        resourceType: "invoice",
-        resourceId: invoice.id,
-        metadata: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, status: invoice.status },
-      });
-    } catch (e) {
-      logger.error("Timeline emit failed (invoice.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
-    }
-
-    // Fire event-driven automations (best-effort, non-blocking).
-    void dispatchBusinessEvent({
-      type: "invoice.created",
-      organizationId: ctx.organizationId,
-      userId: ctx.userId,
-      payload: { invoice: { id: invoice.id, status: invoice.status, total: invoice.total }, id: invoice.id },
-    });
-
-    return NextResponse.json(invoice, { status: 201 });
+    return NextResponse.json({ data: result.invoice }, { status: 201, headers: getCorsHeaders(req) });
   } catch (error) {
     logger.error("Create invoice error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500, headers: getCorsHeaders(req) }
     );
   }
 }

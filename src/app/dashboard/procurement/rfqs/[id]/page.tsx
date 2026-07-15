@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ArrowLeft, Send, Plus } from "lucide-react";
@@ -25,11 +25,12 @@ export default function RfqDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  function load() {
+  const load = useCallback(() => {
     setLoading(true);
     fetch(`/api/procurement/rfqs/${id}`).then((r) => r.json()).then((d) => (d.error ? setRfq(null) : setRfq(d))).finally(() => setLoading(false));
-  }
-  useEffect(() => { load(); }, [id]);
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
 
   async function send() {
     setBusy(true);

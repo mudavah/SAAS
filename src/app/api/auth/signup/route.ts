@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, organizations, organizationMembers } from "@/db/schema";
 import { signupApiSchema } from "@/lib/validations";
 import { rateLimit, AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_MS, clientIp } from "@/lib/api/rate-limit";
+import { createOrganization } from "@/lib/org";
 import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
-    // Throttle account-enumeration / abuse on this unauthenticated endpoint.
     const rl = await rateLimit({
       key: `auth:signup:${clientIp(req)}`,
       limit: AUTH_RATE_LIMIT,
@@ -45,13 +45,19 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
 
-    await db.insert(users).values({
+    const [user] = await db.insert(users).values({
       name: parsed.data.name,
       email: parsed.data.email,
       password: hashedPassword,
+    }).returning();
+
+    const org = await createOrganization({
+      name: `${parsed.data.name}'s Organization`,
+      ownerId: user.id,
+      roleType: "owner",
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, organizationId: org.id }, { status: 201 });
   } catch (error) {
     logger.error("Signup error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(

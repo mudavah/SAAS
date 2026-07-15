@@ -2,10 +2,19 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const HEADER = "x-request-id";
+
+function correlationId(req: NextRequest): string {
+  const existing = req.headers.get(HEADER);
+  if (existing) return existing;
+  return crypto.randomUUID();
+}
+
 const publicRoutes = ["/", "/login", "/signup", "/forgot-password", "/privacy", "/terms"];
 const authRoutes = ["/login", "/signup", "/forgot-password"];
 
 export default auth((req) => {
+  const id = correlationId(req);
   const { nextUrl } = req;
   const pathname = nextUrl.pathname;
   const isLoggedIn = !!req.auth;
@@ -15,28 +24,33 @@ export default auth((req) => {
   const isApiAuth = pathname.startsWith("/api/auth");
   const isMpesaCallback = pathname === "/api/mpesa/callback" || pathname.startsWith("/api/payments/webhooks/mpesa");
   const isPaymentWebhooks = pathname.startsWith("/api/payments/webhooks");
-  // Public API routes authenticate via API keys inside the handler.
   const isPublicApi = pathname.startsWith("/api/v1");
   const isDeveloperApi = pathname.startsWith("/api/developer");
   const isDeveloperPortal = pathname.startsWith("/developer");
   const isApi = pathname.startsWith("/api");
 
-  // These endpoints authenticate themselves — never redirect them.
   if (isApiAuth || isMpesaCallback || isPaymentWebhooks || isPublicApi || isDeveloperApi) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    res.headers.set(HEADER, id);
+    return res;
   }
 
-  // Other API routes authenticate via session cookies; let them return 401.
   if (isApi) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    res.headers.set(HEADER, id);
+    return res;
   }
 
   if (isAuthRoute && isLoggedIn) {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+    const res = NextResponse.redirect(new URL("/dashboard", nextUrl));
+    res.headers.set(HEADER, id);
+    return res;
   }
 
   if (!isLoggedIn && !isPublic) {
-    return NextResponse.redirect(new URL("/login", nextUrl));
+    const res = NextResponse.redirect(new URL("/login", nextUrl));
+    res.headers.set(HEADER, id);
+    return res;
   }
 
   if (
@@ -45,10 +59,11 @@ export default auth((req) => {
     !isOnboarding &&
     !isApi
   ) {
-    return NextResponse.redirect(new URL("/onboarding", nextUrl));
+    const res = NextResponse.redirect(new URL("/onboarding", nextUrl));
+    res.headers.set(HEADER, id);
+    return res;
   }
 
-  // Tenant guard: a logged-in, onboarded user must have an active organization.
   if (
     isLoggedIn &&
     req.auth?.user?.onboardingComplete &&
@@ -56,10 +71,14 @@ export default auth((req) => {
     pathname.startsWith("/dashboard") &&
     !isApi
   ) {
-    return NextResponse.redirect(new URL("/onboarding", nextUrl));
+    const res = NextResponse.redirect(new URL("/onboarding", nextUrl));
+    res.headers.set(HEADER, id);
+    return res;
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  res.headers.set(HEADER, id);
+  return res;
 });
 
 export const config = {

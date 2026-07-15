@@ -1,4 +1,5 @@
 import type { PaymentProvider, PaymentOperationType, CreatePaymentInput, CreatePaymentResult, VerifyPaymentInput, VerifyPaymentResult, RefundInput, RefundResult, CheckStatusInput, CheckStatusResult, CancelPendingInput, CancelPendingResult, ProviderConfig, PaymentProviderType } from "../types";
+import { fetchWithTimeout } from "@/lib/http";
 
 export class PesapalProvider implements PaymentProvider {
   readonly type: PaymentProviderType = "pesapal";
@@ -47,13 +48,14 @@ export class PesapalProvider implements PaymentProvider {
       ? "https://www.pesapal.com/api/"
       : "https://demo.pesapal.com/api/";
 
-    const res = await fetch(`${baseUrl}Auth/RequestToken`, {
+    const res = await fetchWithTimeout(`${baseUrl}Auth/RequestToken`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         consumer_key: this.config.apiKey,
         consumer_secret: this.config.apiSecret,
       }),
+      timeoutMs: 10_000,
     });
 
     const data = await res.json();
@@ -83,13 +85,14 @@ export class PesapalProvider implements PaymentProvider {
         metadata: input.metadata || {},
       };
 
-      const res = await fetch(this.getBaseUrl(), {
+      const res = await fetchWithTimeout(this.getBaseUrl(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
+        timeoutMs: 15_000,
       });
 
       const data = await res.json();
@@ -123,10 +126,11 @@ export class PesapalProvider implements PaymentProvider {
       const token = await this.getAuthToken();
       const baseUrl = this.getBaseUrl().replace("PostPesapalDirectOrderV4", "");
 
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${baseUrl}Transactions/GetTransactionStatus?orderTrackingId=${input.providerPaymentId}&merchantReference=${input.reference || ""}`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          timeoutMs: 15_000,
         }
       );
 
@@ -166,11 +170,12 @@ export class PesapalProvider implements PaymentProvider {
       const token = await this.getAuthToken();
       const baseUrl = this.getBaseUrl().replace("PostPesapalDirectOrderV4", "");
 
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${baseUrl}Transactions/CancelTransaction?orderTrackingId=${input.providerPaymentId}`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
+          timeoutMs: 15_000,
         }
       );
 
@@ -192,7 +197,7 @@ export class PesapalProvider implements PaymentProvider {
       const token = await this.getAuthToken();
       const baseUrl = this.getBaseUrl().replace("PostPesapalDirectOrderV4", "");
 
-      const res = await fetch(`${baseUrl}Transactions/Refund`, {
+      const res = await fetchWithTimeout(`${baseUrl}Transactions/Refund`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -204,6 +209,7 @@ export class PesapalProvider implements PaymentProvider {
           username: this.config.username,
           remarks: input.reason || "Refund",
         }),
+        timeoutMs: 15_000,
       });
 
       const data = await res.json();

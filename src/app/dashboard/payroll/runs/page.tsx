@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Play, CheckCircle2, XCircle, Loader2, Send } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
@@ -72,7 +72,7 @@ export default function PayrollRunsPage() {
   const [periodId, setPeriodId] = useState("");
   const [notes, setNotes] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [runsRes, periodsRes] = await Promise.all([
@@ -89,11 +89,11 @@ export default function PayrollRunsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   function reset() {
     setPeriodId("");

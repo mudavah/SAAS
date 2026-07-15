@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,7 +64,7 @@ export default function SalaryStructuresPage() {
   const [compIsStatutory, setCompIsStatutory] = useState(false);
   const [compSaving, setCompSaving] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/payroll/structures");
@@ -75,11 +75,11 @@ export default function SalaryStructuresPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   function reset() {
     setName("");

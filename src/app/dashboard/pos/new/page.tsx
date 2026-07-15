@@ -88,7 +88,7 @@ export default function NewSalePage() {
     }
   };
 
-  const addToCart = (product: Product) => {
+  const addToCart = useCallback((product: Product) => {
     const existing = cart.find((item) => item.productId === product.id);
     const price = Number(product.sellingPrice);
     const stock = product.stock ? Number(product.stock.quantity) : Infinity;
@@ -123,7 +123,7 @@ export default function NewSalePage() {
       };
       setCart((prev) => [...prev, newItem]);
     }
-  };
+  }, [cart, toast]);
 
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
@@ -176,7 +176,7 @@ export default function NewSalePage() {
         toast({ title: "Product not found", variant: "destructive" });
       }
     },
-    [barcodeInput, products, toast]
+    [barcodeInput, products, toast, addToCart]
   );
 
   const filteredProducts = products.filter((product) => {

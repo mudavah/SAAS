@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FileSearch, Filter } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,7 @@ export default function AuditPage() {
   const [filterType, setFilterType] = useState("");
   const [filterAction, setFilterAction] = useState("");
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  async function fetchLogs() {
+  const fetchLogs = useCallback(async () => {
     const params = new URLSearchParams();
     if (filterType) params.set("resourceType", filterType);
     if (filterAction) params.set("action", filterAction);
@@ -42,7 +38,11 @@ export default function AuditPage() {
     const data = await res.json();
     if (data.logs) setLogs(data.logs);
     setLoading(false);
-  }
+  }, [filterType, filterAction]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   const actionColors: Record<string, string> = {
     create: "bg-green-100 text-green-800",

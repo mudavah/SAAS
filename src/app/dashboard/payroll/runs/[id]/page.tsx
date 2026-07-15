@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useParams } from "next/navigation";
 import { Play, CheckCircle2, FileText, BookOpen, Download, Send, Loader2, XCircle, ChevronDown, ChevronRight } from "lucide-react";
@@ -80,7 +80,7 @@ export default function PayrollRunDetailPage() {
   const [exportFormat, setExportFormat] = useState("csv");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/payroll/runs/${id}`);
@@ -91,11 +91,11 @@ export default function PayrollRunDetailPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id, toast]);
 
   useEffect(() => {
     if (id) load();
-  }, [id]);
+  }, [id, load]);
 
   async function processRun() {
     setProcessing(true);

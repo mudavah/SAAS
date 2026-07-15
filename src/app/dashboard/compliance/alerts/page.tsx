@@ -94,7 +94,7 @@ export default async function ComplianceAlertsPage() {
             {alerts.length === 0 ? (
               <div className="text-center py-8">
                 <CheckCircle2 className="mx-auto h-12 w-12 text-kazi-green mb-3" />
-                <p className="text-muted-foreground">No active alerts. You're all set!</p>
+                <p className="text-muted-foreground">No active alerts. You&apos;re all set!</p>
               </div>
             ) : (
               <div className="space-y-3">

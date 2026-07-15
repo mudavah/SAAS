@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -49,7 +49,7 @@ export default function PayrollDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [insightsRes, reportsRes, payslipsRes, periodsRes, runsRes] = await Promise.all([
@@ -75,11 +75,11 @@ export default function PayrollDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   async function refreshInsights() {
     setRefreshing(true);

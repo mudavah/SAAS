@@ -636,7 +636,7 @@ export const complianceAlerts = pgTable("compliance_alerts", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  organizationId: text("organization_id").references(() => organizations.id, {
+  organizationId: text("organization_id").notNull().references(() => organizations.id, {
     onDelete: "cascade",
   }),
   severity: complianceAlertSeverityEnum("severity").notNull(),
@@ -2145,7 +2145,7 @@ export const invoices = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id").references(() => organizations.id, {
+    organizationId: text("organization_id").notNull().references(() => organizations.id, {
       onDelete: "cascade",
     }),
     clientId: text("client_id").references(() => clients.id, {
@@ -2196,7 +2196,7 @@ export const payments = pgTable("payments", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  organizationId: text("organization_id").references(() => organizations.id, {
+  organizationId: text("organization_id").notNull().references(() => organizations.id, {
     onDelete: "cascade",
   }),
   invoiceId: text("invoice_id").references(() => invoices.id, {

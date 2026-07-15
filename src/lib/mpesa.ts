@@ -23,6 +23,7 @@ const MPESA_BASE_URL =
 let cachedToken: { token: string; expires: number } | null = null;
 
 import { isPlaceholder } from "@/lib/validation-helpers";
+import { fetchWithTimeout } from "@/lib/http";
 
 export function isMpesaConfigured(): boolean {
   return (
@@ -122,10 +123,11 @@ export async function getMpesaAccessToken(): Promise<string> {
     `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
   ).toString("base64");
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
     {
       headers: { Authorization: `Basic ${auth}` },
+      timeoutMs: 10_000,
     }
   );
 
@@ -190,7 +192,7 @@ export async function initiateStkPush(params: StkPushParams) {
     TransactionDesc: params.transactionDesc.slice(0, 13),
   };
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`,
     {
       method: "POST",
@@ -199,6 +201,7 @@ export async function initiateStkPush(params: StkPushParams) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      timeoutMs: 15_000,
     }
   );
 
@@ -444,7 +447,7 @@ export async function submitInvoiceToEtims(
 
   // Live submission to a configured eTIMS device/proxy endpoint.
   try {
-    const res = await fetch(`${process.env.ETIMS_API_URL}/insertTrnsSalesOsdc`, {
+    const res = await fetchWithTimeout(`${process.env.ETIMS_API_URL}/insertTrnsSalesOsdc`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -472,6 +475,7 @@ export async function submitInvoiceToEtims(
           taxTyCd: (it.taxRate ?? 16) > 0 ? "B" : "A",
         })),
       }),
+      timeoutMs: 15_000,
     });
 
     const text = await res.text();

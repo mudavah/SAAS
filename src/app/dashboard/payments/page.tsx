@@ -146,7 +146,7 @@ export default function PaymentsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Today's Revenue</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Today&apos;s Revenue</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>

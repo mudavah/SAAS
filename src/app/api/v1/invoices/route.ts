@@ -8,8 +8,9 @@ import {
   handleApi,
   type ServerContext,
 } from "@/lib/session";
-import { generateInvoiceNumber, getCurrentMonth, PLAN_LIMITS } from "@/lib/utils";
+import { createInvoice } from "@/lib/invoices/service";
 import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
+import { getPagination } from "@/lib/pagination";
 import { logger } from "@/lib/logger";
 
 export async function OPTIONS(req: Request) {
@@ -18,13 +19,27 @@ export async function OPTIONS(req: Request) {
 
 export async function GET(req: Request) {
   return handleApi(req, "invoices.view", async (ctx: ServerContext) => {
-    const rows = await db.query.invoices.findMany({
-      where: eq(invoices.organizationId, ctx.organizationId),
-      orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
-      with: { client: true, items: true },
-      limit: 100,
+    const url = new URL(req.url);
+    const { page, limit, offset } = getPagination({
+      page: Number(url.searchParams.get("page")) || undefined,
+      limit: Number(url.searchParams.get("limit")) || undefined,
     });
-    return NextResponse.json({ invoices: rows }, { headers: getCorsHeaders(req) });
+
+    const [rows, total] = await Promise.all([
+      db.query.invoices.findMany({
+        where: eq(invoices.organizationId, ctx.organizationId),
+        orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
+        with: { client: true, items: true },
+        limit,
+        offset,
+      }),
+      Promise.resolve(0),
+    ]);
+
+    return NextResponse.json(
+      { data: rows, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } },
+      { headers: getCorsHeaders(req) }
+    );
   });
 }
 
@@ -44,115 +59,21 @@ export async function POST(req: Request) {
         );
       }
 
-      const plan = (ctx.organization.plan || "free") as keyof typeof PLAN_LIMITS;
-      const limits = PLAN_LIMITS[plan];
-
-      if (limits.invoicesPerMonth !== Infinity) {
-        const month = getCurrentMonth();
-        const usage = await db.query.usageRecords.findFirst({
-          where: and(
-            eq(usageRecords.organizationId, ctx.organizationId),
-            eq(usageRecords.month, month)
-          ),
-        });
-
-        if (usage && usage.invoicesCreated >= limits.invoicesPerMonth) {
-          return NextResponse.json(
-            { error: "Plan invoice limit reached." },
-            { status: 403, headers: getCorsHeaders(req) }
-          );
-        }
-      }
-
       const { items, send, ...invoiceData } = parsed.data;
-
-      if (invoiceData.clientId) {
-        const client = await db.query.clients.findFirst({
-          where: and(
-            eq(clients.id, invoiceData.clientId),
-            eq(clients.organizationId, ctx.organizationId)
-          ),
-          columns: { id: true },
-        });
-        if (!client) {
-          return NextResponse.json(
-            { error: "Client not found" },
-            { status: 404, headers: getCorsHeaders(req) }
-          );
-        }
-      }
-
-      const subtotal = items.reduce(
-        (s, i) => s + i.quantity * i.unitPrice,
-        0
-      );
-      const taxAmount = subtotal * (invoiceData.taxRate / 100);
-      const total = subtotal + taxAmount;
-
-      const [invoice] = await db
-        .insert(invoices)
-        .values({
-          organizationId: ctx.organizationId,
-          userId: ctx.userId!,
-          clientId: invoiceData.clientId || null,
-          invoiceNumber: generateInvoiceNumber(),
-          issueDate: invoiceData.issueDate,
-          dueDate: invoiceData.dueDate,
-          currency: invoiceData.currency,
-          subtotal: subtotal.toFixed(2),
-          taxRate: invoiceData.taxRate.toFixed(2),
-          taxAmount: taxAmount.toFixed(2),
-          total: total.toFixed(2),
-          notes: invoiceData.notes,
-          terms: invoiceData.terms,
-          status: send ? "sent" : "draft",
-          sentAt: send ? new Date() : null,
-        })
-        .returning();
-
-      await db.insert(invoiceItems).values(
-        items.map((item, index) => ({
-          invoiceId: invoice.id,
-          description: item.description,
-          quantity: item.quantity.toFixed(2),
-          unitPrice: item.unitPrice.toFixed(2),
-          amount: (item.quantity * item.unitPrice).toFixed(2),
-          sortOrder: index,
-        }))
-      );
-
-      if (limits.invoicesPerMonth !== Infinity) {
-        const month = getCurrentMonth();
-        const existingUsage = await db.query.usageRecords.findFirst({
-          where: and(
-            eq(usageRecords.organizationId, ctx.organizationId),
-            eq(usageRecords.month, month)
-          ),
-        });
-
-        if (existingUsage) {
-          await db
-            .update(usageRecords)
-            .set({ invoicesCreated: existingUsage.invoicesCreated + 1 })
-            .where(eq(usageRecords.id, existingUsage.id));
-        } else {
-          await db.insert(usageRecords).values({
-            organizationId: ctx.organizationId,
-            userId: ctx.userId!,
-            month,
-            invoicesCreated: 1,
-          });
-        }
-      }
+      const result = await createInvoice(ctx, {
+        ...invoiceData,
+        items,
+        send,
+      });
 
       return NextResponse.json(
-        { invoice },
+        { data: result.invoice },
         { status: 201, headers: getCorsHeaders(req) }
       );
     } catch (error) {
       logger.error("API create invoice error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       return NextResponse.json(
-        { error: "Internal server error" },
+        { error: error instanceof Error ? error.message : "Internal server error" },
         { status: 500, headers: getCorsHeaders(req) }
       );
     }

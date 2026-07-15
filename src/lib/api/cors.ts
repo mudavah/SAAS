@@ -25,6 +25,12 @@ export function getCorsHeaders(req: Request): Record<string, string> {
   }
 
   if (process.env.NODE_ENV === "production") {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return {
+        ...API_CORS_HEADERS,
+        ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),
+      };
+    }
     return {
       "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Authorization, Content-Type, X-API-Key",
@@ -32,10 +38,23 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     };
   }
 
+  if (!origin) {
+    return { ...API_CORS_HEADERS };
+  }
+
+  const devAllowed = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"];
+  if (devAllowed.includes(origin) || allowedOrigins.includes(origin)) {
+    return {
+      ...API_CORS_HEADERS,
+      "Access-Control-Allow-Origin": origin,
+      "Vary": "Origin",
+    };
+  }
+
   return {
-    ...API_CORS_HEADERS,
-    "Access-Control-Allow-Origin": origin,
-    "Vary": "Origin",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-API-Key",
+    "Access-Control-Expose-Headers": "X-RateLimit-Limit, X-RateLimit-Remaining",
   };
 }
 

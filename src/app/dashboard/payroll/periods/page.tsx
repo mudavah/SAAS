@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Lock, XCircle, Loader2 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/sidebar";
@@ -49,7 +49,7 @@ export default function PayrollPeriodsPage() {
   const [endDate, setEndDate] = useState("");
   const [isLocked, setIsLocked] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/payroll/periods");
@@ -60,11 +60,11 @@ export default function PayrollPeriodsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   function reset() {
     setName("");

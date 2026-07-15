@@ -18,6 +18,7 @@ import {
 } from "@/db/schema";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { getLowStockProducts } from "./metrics";
+import { fetchWithTimeout } from "@/lib/http";
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -167,7 +168,7 @@ export async function getProcurementAdvice(organizationId: string): Promise<stri
   }
 
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -186,6 +187,7 @@ export async function getProcurementAdvice(organizationId: string): Promise<stri
         max_tokens: 500,
         temperature: 0.4,
       }),
+      timeoutMs: 30_000,
     });
     if (!res.ok) return buildFallbackAdvice(lowStock.length, lowStockSummary, committed, utilisation);
     const data = await res.json();

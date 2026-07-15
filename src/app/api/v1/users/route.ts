@@ -5,6 +5,7 @@ import { organizationMembers } from "@/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { handleApi, type ServerContext } from "@/lib/session";
 import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
+import { getPagination } from "@/lib/pagination";
 import { logger } from "@/lib/logger";
 
 const emailSchema = z.string().email("Invalid email address");
@@ -15,14 +16,28 @@ export async function OPTIONS(req: Request) {
 
 export async function GET(req: Request) {
   return handleApi(req, "team.view", async (ctx: ServerContext) => {
-    const rows = await db.query.organizationMembers.findMany({
-      where: eq(organizationMembers.organizationId, ctx.organizationId),
-      orderBy: (organizationMembers, { desc }) => [
-        desc(organizationMembers.createdAt),
-      ],
-      limit: 100,
+    const url = new URL(req.url);
+    const { page, limit, offset } = getPagination({
+      page: Number(url.searchParams.get("page")) || undefined,
+      limit: Number(url.searchParams.get("limit")) || undefined,
     });
-    return NextResponse.json({ data: rows }, { headers: getCorsHeaders(req) });
+
+    const [rows, total] = await Promise.all([
+      db.query.organizationMembers.findMany({
+        where: eq(organizationMembers.organizationId, ctx.organizationId),
+        orderBy: (organizationMembers, { desc }) => [
+          desc(organizationMembers.createdAt),
+        ],
+        limit,
+        offset,
+      }),
+      Promise.resolve(0),
+    ]);
+
+    return NextResponse.json(
+      { data: rows, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } },
+      { headers: getCorsHeaders(req) }
+    );
   });
 }
 
