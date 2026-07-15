@@ -70,11 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
       security-events: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Trufflehog needs full history to diff against the default branch.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -88,12 +89,9 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high || true
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - name: Detect secrets (Trufflehog)
+        uses: trufflesecurity/trufflehog@main
         with:
-          languages: javascript-typescript
-          # Analyze source directly; no build needed (avoids requiring secrets).
-          build-mode: none
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
