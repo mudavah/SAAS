@@ -5,6 +5,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { listSuppliersWithPerformance } from "@/lib/procurement/metrics";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "purchasing.suppliers.manage");
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(supplier, { status: 201 });
   } catch (error) {
-    console.error("Create supplier error:", error);
+    logger.error("Create supplier error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -8,6 +8,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { createOrder, getPosStats, listOrders } from "@/lib/pos/service";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "pos.sales.view");
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result, { status: result.status });
   } catch (error) {
-    console.error("Create POS order error:", error);
+    logger.error("Create POS order error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

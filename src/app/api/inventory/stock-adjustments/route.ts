@@ -6,6 +6,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "inventory.view");
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(adjustment, { status: 201 });
   } catch (error) {
-    console.error("Create adjustment error:", error);
+    logger.error("Create adjustment error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

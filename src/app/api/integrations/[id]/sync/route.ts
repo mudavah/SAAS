@@ -4,6 +4,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { getIntegration, toConnectionView } from "@/lib/integrations/connections";
 import { getAdapter } from "@/lib/integrations/adapters";
 import { IntegrationError } from "@/lib/integrations/core";
+import { logger } from "@/lib/logger";
 
 export async function POST(
   req: Request,
@@ -48,7 +49,7 @@ export async function POST(
     if (error instanceof IntegrationError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Sync integration error:", error);
+    logger.error("Sync integration error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

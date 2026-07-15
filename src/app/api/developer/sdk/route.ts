@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireApiContext } from "@/lib/session";
 import { getCorsHeaders } from "@/lib/api/cors";
 import { generateSdkCode, getSdkLanguages } from "@/lib/api/sdk";
+import { logger } from "@/lib/logger";
 
 const generateSchema = z.object({
   language: z.string().min(1, "Language is required"),
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
       { headers: getCorsHeaders(req) }
     );
   } catch (error) {
-    console.error("Generate SDK error:", error);
+    logger.error("Generate SDK error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: getCorsHeaders(req) }

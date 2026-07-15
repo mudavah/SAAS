@@ -54,6 +54,7 @@ import {
 } from "@/lib/validations";
 import { submitInvoiceToEtims, EtimsError, type EtimsConfigLike } from "@/lib/mpesa";
 import { decryptConfigSecrets } from "@/lib/crypto";
+import { logger } from "@/lib/logger";
 
 const round2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -153,7 +154,7 @@ export async function openSession(ctx: ServerContext, body: unknown) {
       metadata: { openingFloat: session.openingFloat },
     });
   } catch (e) {
-    console.error("Timeline emit failed (pos.shift.opened):", e);
+    logger.error("Timeline emit failed (pos.shift.opened):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return { session, status: 201 };
@@ -214,7 +215,7 @@ export async function closeSession(ctx: ServerContext, sessionId: string, body: 
       metadata: { closingFloat: updated.closingFloat, cashDeposited: updated.cashDeposited },
     });
   } catch (e) {
-    console.error("Timeline emit failed (pos.shift.closed):", e);
+    logger.error("Timeline emit failed (pos.shift.closed):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return { session: updated, status: 200 };
@@ -327,7 +328,7 @@ export async function createOrder(ctx: ServerContext, body: unknown) {
       metadata: { orderNumber: order.orderNumber, total: order.total, status: order.status },
     });
   } catch (e) {
-    console.error("Timeline emit failed (pos.sale.created):", e);
+    logger.error("Timeline emit failed (pos.sale.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return { order, status: 201 };
@@ -514,7 +515,7 @@ export async function completeOrder(ctx: ServerContext, orderId: string, payment
       .set({ invoiceId: invoice.id })
       .where(eq(posOrders.id, orderId));
   } catch (e) {
-    console.error("Invoice creation failed:", e);
+    logger.error("Invoice creation failed:", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   try {
@@ -535,7 +536,7 @@ export async function completeOrder(ctx: ServerContext, orderId: string, payment
       status: "posted",
     });
   } catch (e) {
-    console.error("Bookkeeping entry failed:", e);
+    logger.error("Bookkeeping entry failed:", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   if (invoiceId) {
@@ -612,13 +613,13 @@ export async function completeOrder(ctx: ServerContext, orderId: string, payment
                 });
               }
             } catch (etimsErr) {
-              console.error("eTIMS submission error:", etimsErr);
+              logger.error("eTIMS submission error:", { error: etimsErr instanceof Error ? etimsErr.message : String(etimsErr), stack: etimsErr instanceof Error ? etimsErr.stack : undefined });
             }
           }
         }
       }
     } catch (e) {
-      console.error("eTIMS submission failed:", e);
+      logger.error("eTIMS submission failed:", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
   }
 
@@ -643,7 +644,7 @@ export async function completeOrder(ctx: ServerContext, orderId: string, payment
       metadata: { orderNumber: order.orderNumber, total: order.total, method: primaryMethod, changeDue },
     });
   } catch (e) {
-    console.error("Timeline emit failed (pos.sale.completed):", e);
+    logger.error("Timeline emit failed (pos.sale.completed):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   await createNotification({
@@ -701,7 +702,7 @@ export async function cancelOrder(ctx: ServerContext, orderId: string) {
       metadata: { orderNumber: order.orderNumber },
     });
   } catch (e) {
-    console.error("Timeline emit failed (pos.sale.cancelled):", e);
+    logger.error("Timeline emit failed (pos.sale.cancelled):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return { order: updated, status: 200 };
@@ -860,7 +861,7 @@ export async function createReturn(ctx: ServerContext, orderId: string, body: un
       metadata: { returnNumber, orderNumber: order.orderNumber, total: returnRecord.total },
     });
   } catch (e) {
-    console.error("Timeline emit failed (pos.sale.refunded):", e);
+    logger.error("Timeline emit failed (pos.sale.refunded):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return { return: returnRecord, status: 201 };

@@ -9,6 +9,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { toCents, fromCents } from "@/lib/money";
 import { dispatchBusinessEvent } from "@/lib/automation/engine";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "payments.view");
@@ -117,7 +118,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(payment, { status: 201 });
   } catch (error) {
-    console.error("Payment error:", error);
+    logger.error("Payment error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
 
     if (error instanceof PaymentEngineError) {
       return NextResponse.json(

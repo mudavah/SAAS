@@ -5,6 +5,7 @@ import {
   autoGenerateAlerts,
 } from "@/lib/compliance/alerts";
 import type { ComplianceAlertSeverity } from "@/db/schema";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
     try {
       await autoGenerateAlerts(ctx.organizationId, ctx.userId);
     } catch (err) {
-      console.error("autoGenerateAlerts failed:", err);
+      logger.error("autoGenerateAlerts failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
   }
 

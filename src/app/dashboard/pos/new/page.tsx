@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 interface CartItem {
   id: string;
@@ -71,7 +72,7 @@ export default function NewSalePage() {
         setProducts(data);
       }
     } catch (e) {
-      console.error("Failed to load products:", e);
+      logger.error("Failed to load products:", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
   };
 
@@ -83,7 +84,7 @@ export default function NewSalePage() {
         setCategories(data);
       }
     } catch (e) {
-      console.error("Failed to load categories:", e);
+      logger.error("Failed to load categories:", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
   };
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiContext } from "@/lib/session";
 import { enrollEmployeeInTraining } from "@/lib/hr/service";
+import { logger } from "@/lib/logger";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: routeId } = await params;
@@ -17,7 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(result.enrollment, { status: result.status });
   } catch (error) {
-    console.error("Enroll employee error:", error);
+    logger.error("Enroll employee error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

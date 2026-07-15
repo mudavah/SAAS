@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Smartphone, CreditCard, Building2, TrendingUp, Clock, XCircle, Link2, Settings, Receipt, RefreshCw } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 interface Payment {
   id: string;
@@ -55,7 +56,7 @@ export default function PaymentsPage() {
       setPayments(data.payments ?? data);
       setStats(data.stats || null);
     } catch (error) {
-      console.error("Failed to fetch payments:", error);
+      logger.error("Failed to fetch payments:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     }
   }
 

@@ -8,6 +8,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { dispatchBusinessEvent } from "@/lib/automation/engine";
+import { logger } from "@/lib/logger";
 
 export async function GET(
   req: Request,
@@ -115,7 +116,7 @@ export async function PATCH(
         metadata: { status: updated.status, amount: updated.amount },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.deal won/lost):", e);
+      logger.error("Timeline emit failed (crm.deal won/lost):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     // Fire event-driven automations for a won deal (best-effort, non-blocking).

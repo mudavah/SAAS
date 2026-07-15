@@ -6,6 +6,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { getCorsHeaders } from "@/lib/api/cors";
 import { listWebhookDeliveries, retryWebhookDelivery } from "@/lib/api/webhooks";
+import { logger } from "@/lib/logger";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: getCorsHeaders(req) });
@@ -79,7 +80,7 @@ export async function POST(
       { headers: getCorsHeaders(req) }
     );
   } catch (error) {
-    console.error("Retry webhook delivery error:", error);
+    logger.error("Retry webhook delivery error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: getCorsHeaders(req) }

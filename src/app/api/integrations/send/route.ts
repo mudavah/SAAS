@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiContext } from "@/lib/session";
 import { dispatch } from "@/lib/integrations";
 import { IntegrationError } from "@/lib/integrations/core";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   const res = await requireApiContext(req, "integrations.sync");
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     if (error instanceof IntegrationError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Dispatch error:", error);
+    logger.error("Dispatch error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

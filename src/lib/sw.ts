@@ -1,3 +1,5 @@
+import { logger } from "@/lib/logger";
+
 type SyncOperation = {
   id: string;
   method: "POST" | "PATCH" | "DELETE";
@@ -60,7 +62,7 @@ export async function queueForBackgroundSync(request: Request): Promise<void> {
     const registration = await navigator.serviceWorker.ready;
     await (registration as any).sync.register(`sync-${operation.id}`);
   } catch (error) {
-    console.error("[sw] Failed to queue for background sync:", error);
+    logger.error("[sw] Failed to queue for background sync:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
   }
 }
 

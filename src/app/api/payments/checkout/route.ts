@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createPayment } from "@/lib/payments/engine";
 import { requireApiContext } from "@/lib/session";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   const res = await requireApiContext(req, "payments.create");
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
       reference: result.reference,
     });
   } catch (error) {
-    console.error("Checkout error:", error);
+    logger.error("Checkout error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Checkout failed" }, { status: 500 });
   }
 }

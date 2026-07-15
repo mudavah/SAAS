@@ -8,6 +8,7 @@
 import { db } from "@/db";
 import { auditLogs, type AuditCategory } from "@/db/schema";
 import type { ServerContext } from "@/lib/session";
+import { logger } from "@/lib/logger";
 
 export interface AuditLogInput {
   action: string;
@@ -64,6 +65,6 @@ export async function logAuditSafe(
   try {
     await logAudit(ctx, input);
   } catch (err) {
-    console.error("Audit log failed:", err);
+    logger.error("Audit log failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   }
 }

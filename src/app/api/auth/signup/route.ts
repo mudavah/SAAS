@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { signupApiSchema } from "@/lib/validations";
 import { rateLimit, AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_MS, clientIp } from "@/lib/api/rate-limit";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Signup error:", error);
+    logger.error("Signup error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -7,6 +7,7 @@ import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { generateApiSecret, hashApiSecret } from "@/lib/api/auth";
 import { ALL_PERMISSION_KEYS } from "@/lib/rbac";
+import { logger } from "@/lib/logger";
 
 const createKeySchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Create API key error:", error);
+    logger.error("Create API key error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

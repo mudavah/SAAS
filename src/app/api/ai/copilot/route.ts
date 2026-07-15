@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { aiRequestSchema } from "@/lib/validations";
 import { getApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import {
   callOpenAI,
   buildSystemPrompt,
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    console.error("Copilot error:", error);
+    logger.error("Copilot error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Copilot failed" },
       { status: 500 }

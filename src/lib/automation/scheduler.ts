@@ -13,6 +13,7 @@ import { and, eq } from "drizzle-orm";
 import type { ServerContext } from "@/lib/session";
 import { loadWorkflow, runWorkflow } from "./engine";
 import type { Workflow, AutomationEvent } from "./types";
+import { logger } from "@/lib/logger";
 
 function fieldMatches(field: string, value: number, max: number): boolean {
   if (field === "*") return true;
@@ -110,7 +111,7 @@ export async function runDueScheduledWorkflows(): Promise<{ workflowId: string; 
       const res = await runWorkflow(ctx, wf, event);
       out.push({ workflowId: wf.id, status: res.status });
     } catch (err) {
-      console.error(`Scheduled workflow ${wf.id} failed:`, err);
+      logger.error("Scheduled workflow ${wf.id} failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       out.push({ workflowId: wf.id, status: "failed" });
     }
   }

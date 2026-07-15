@@ -10,6 +10,7 @@ import { createAuditLog } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import type Stripe from "stripe";
 import type { PlanType } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   if (!stripe) {
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (error) {
-    console.error("Stripe webhook signature error:", error);
+    logger.error("Stripe webhook signature error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -184,7 +185,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("Stripe webhook handler error:", error);
+    logger.error("Stripe webhook handler error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 }

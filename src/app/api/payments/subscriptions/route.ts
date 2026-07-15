@@ -4,6 +4,7 @@ import { subscriptions, users, organizations } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { createAuditLog } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "subscription.manage");
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ subscription }, { status: 201 });
   } catch (error) {
-    console.error("Subscription error:", error);
+    logger.error("Subscription error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Failed to create subscription" }, { status: 500 });
   }
 }

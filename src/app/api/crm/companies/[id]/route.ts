@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(
   req: Request,
@@ -73,7 +74,7 @@ export async function PATCH(
       resourceId: updated.id,
     });
   } catch (e) {
-    console.error("Timeline emit failed (crm.company.updated):", e);
+    logger.error("Timeline emit failed (crm.company.updated):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return NextResponse.json(updated);

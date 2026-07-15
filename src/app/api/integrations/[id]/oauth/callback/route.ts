@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getIntegration } from "@/lib/integrations";
+import { logger } from "@/lib/logger";
 import {
   verifyState,
   getIntegrationForState,
@@ -52,7 +53,7 @@ export async function GET(
     await storeTokens(parsed.organizationId, id, tokens);
     return NextResponse.redirect(`${APP_URL}/dashboard/integrations/${id}?oauth=success`);
   } catch (err) {
-    console.error("OAuth callback error:", err);
+    logger.error("OAuth callback error:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     return NextResponse.redirect(
       `${APP_URL}/dashboard/integrations/${id}?oauth=error&reason=exchange_failed`
     );

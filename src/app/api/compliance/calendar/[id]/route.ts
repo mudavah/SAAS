@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { taxCalendarUpdateSchema } from "@/lib/validations";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function PATCH(
   req: Request,
@@ -59,7 +60,7 @@ export async function PATCH(
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("Update calendar event error:", error);
+    logger.error("Update calendar event error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

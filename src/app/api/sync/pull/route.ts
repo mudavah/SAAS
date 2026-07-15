@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { eq, desc, gt, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "sync.pull");
@@ -85,7 +86,7 @@ export async function GET(req: Request) {
           });
         }
       } catch (error) {
-        console.error(`Error fetching ${entityQuery.name}:`, error);
+        logger.error("Error fetching ${entityQuery.name}:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       }
     }
 
@@ -95,7 +96,7 @@ export async function GET(req: Request) {
       count: changes.length,
     });
   } catch (error) {
-    console.error("Sync pull error:", error);
+    logger.error("Sync pull error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -5,6 +5,7 @@ import { onboardingSchema } from "@/lib/validations";
 import { eq, and } from "drizzle-orm";
 import { getApiContext } from "@/lib/session";
 import { getActiveOrganization, ensureUserHasOrganization } from "@/lib/org";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   const res = await getApiContext(req);
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Onboarding error:", error);
+    logger.error("Onboarding error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

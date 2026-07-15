@@ -12,6 +12,7 @@
 import { db } from "@/db";
 import { businessTimeline, type TimelineEventType } from "@/db/schema";
 import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { logger } from "@/lib/logger";
 
 export interface EmitTimelineEventInput {
   /** Actor who triggered the event. Null/undefined for system events. */
@@ -52,7 +53,7 @@ export async function emitTimelineEvent(
     } as any);
   } catch (err) {
     // Best-effort: timeline must never break the main flow.
-    console.error("emitTimelineEvent failed:", err);
+    logger.error("emitTimelineEvent failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   }
 }
 

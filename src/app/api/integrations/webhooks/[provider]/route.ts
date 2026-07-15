@@ -6,6 +6,7 @@ import {
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAdapter } from "@/lib/integrations/adapters";
+import { logger } from "@/lib/logger";
 
 export async function POST(
   req: Request,
@@ -77,7 +78,7 @@ export async function POST(
 
     return NextResponse.json({ received: true, provider });
   } catch (error) {
-    console.error("Webhook error:", error);
+    logger.error("Webhook error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -4,6 +4,7 @@ import { enterpriseBranches } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "enterprise.view");
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(branch, { status: 201 });
   } catch (error) {
-    console.error("Create branch error:", error);
+    logger.error("Create branch error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

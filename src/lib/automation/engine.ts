@@ -26,6 +26,7 @@ import type {
 } from "./types";
 import { logAuditSafe } from "@/lib/audit";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 /**
  * Load a workflow with its actions, all org-scoped.
@@ -199,11 +200,11 @@ export async function dispatchBusinessEvent(event: AutomationEvent): Promise<voi
         const ctx = await buildEventContext(event);
         await runWorkflow(ctx, wf as unknown as Workflow, event);
       } catch (err) {
-        console.error(`Automation ${wf.id} failed:`, err);
+        logger.error("Automation ${wf.id} failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       }
     }
   } catch (err) {
-    console.error("dispatchBusinessEvent error:", err);
+    logger.error("dispatchBusinessEvent error:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   }
 }
 

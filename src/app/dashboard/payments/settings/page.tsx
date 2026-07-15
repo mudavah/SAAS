@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Smartphone, CreditCard, Building2 } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 interface ProviderConfig {
   enabled: boolean;
@@ -33,7 +34,7 @@ export default function PaymentSettingsPage() {
       const data = await res.json();
       setConfigs(data.configs || {});
     } catch (error) {
-      console.error("Failed to fetch providers:", error);
+      logger.error("Failed to fetch providers:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import { procurementAiRecommendations } from "@/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { generateRecommendations, getOpenRecommendations, updateRecommendationStatus } from "@/lib/procurement/recommendations";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "purchasing.reports.view");
@@ -37,7 +38,7 @@ export async function PATCH(req: Request) {
     const updated = await updateRecommendationStatus(ctx.organizationId, id, status);
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("Update recommendation error:", error);
+    logger.error("Update recommendation error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

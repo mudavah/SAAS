@@ -4,6 +4,7 @@ import { organizations, paymentProviderConfigs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getProvider, getAvailableProviders, saveProviderConfig, loadProviderConfig } from "@/lib/payments/engine";
 import { requireApiContext } from "@/lib/session";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "integrations.configure");
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Payment provider config error:", error);
+    logger.error("Payment provider config error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Failed to save provider config" }, { status: 500 });
   }
 }

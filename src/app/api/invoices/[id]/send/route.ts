@@ -10,6 +10,7 @@ import { buildInvoicePdfPayload } from "@/lib/invoice-pdf-data";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { logger } from "@/lib/logger";
 
 type InvoiceWithRelations = typeof invoices.$inferSelect & {
   client: typeof clients.$inferSelect | null;
@@ -78,7 +79,7 @@ export async function POST(
       pdfBuffer,
     });
   } catch (error) {
-    console.error("Send invoice email error:", error);
+    logger.error("Send invoice email error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       {
         error:

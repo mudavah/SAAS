@@ -5,9 +5,7 @@ const nextConfig: NextConfig = {
   // fast in production (`node server.js`). `next start` still works as before.
   output: "standalone",
   eslint: {
-    // No project-wide ESLint config existed pre-launch; lint runs in CI as a
-    // report-only gate and must not block production builds/rollouts.
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
     ignoreBuildErrors: false,

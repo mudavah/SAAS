@@ -7,6 +7,7 @@ import { requireApiContext } from "@/lib/session";
 import { getCorsHeaders } from "@/lib/api/cors";
 import { emitDeveloperEvent } from "@/lib/api/events";
 import { ALL_PERMISSION_KEYS } from "@/lib/rbac";
+import { logger } from "@/lib/logger";
 
 const updateKeySchema = z.object({
   name: z.string().min(2).optional(),
@@ -82,7 +83,7 @@ export async function PATCH(
       { headers: getCorsHeaders(req) }
     );
   } catch (error) {
-    console.error("Update API key error:", error);
+    logger.error("Update API key error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: getCorsHeaders(req) }

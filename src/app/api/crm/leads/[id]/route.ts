@@ -7,6 +7,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { crmLeadSchema } from "@/lib/validations";
 import { scoreLead } from "@/lib/crm/scoring";
+import { logger } from "@/lib/logger";
 
 export async function GET(
   req: Request,
@@ -94,7 +95,7 @@ export async function PATCH(
       metadata: { status: updated.status, score: updated.score },
     });
   } catch (e) {
-    console.error("Timeline emit failed (crm.lead.updated):", e);
+    logger.error("Timeline emit failed (crm.lead.updated):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return NextResponse.json(updated);

@@ -11,6 +11,7 @@ import { inventoryProductSchema } from "@/lib/validations";
 import { eq, asc, desc, and, sql, SQL } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "inventory.view");
@@ -151,7 +152,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
-    console.error("Create product error:", error);
+    logger.error("Create product error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

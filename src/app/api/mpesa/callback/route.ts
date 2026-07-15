@@ -7,6 +7,7 @@ import { verifyPayment } from "@/lib/payments/engine";
 import { requireWebhookSecret } from "@/lib/payments/webhook-auth";
 import { createNotification } from "@/lib/notifications";
 import { toCents, fromCents } from "@/lib/money";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch (error) {
-    console.error("M-Pesa callback error:", error);
+    logger.error("M-Pesa callback error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
   }
 }

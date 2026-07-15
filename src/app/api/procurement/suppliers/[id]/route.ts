@@ -4,6 +4,7 @@ import { inventorySuppliers } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const res = await requireApiContext(req, "purchasing.suppliers.manage");
@@ -46,7 +47,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("Update supplier error:", error);
+    logger.error("Update supplier error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

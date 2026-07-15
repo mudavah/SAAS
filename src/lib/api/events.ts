@@ -11,6 +11,7 @@ import { webhooks } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { deliverWebhook } from "@/lib/api/webhooks";
+import { logger } from "@/lib/logger";
 
 export type DeveloperPlatformEventType =
   | "api.key.created"
@@ -95,6 +96,6 @@ export async function emitDeveloperEvent(input: EmitDeveloperEventInput): Promis
       }
     }
   } catch (err) {
-    console.error("emitDeveloperEvent failed:", err);
+    logger.error("emitDeveloperEvent failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   }
 }

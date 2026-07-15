@@ -30,8 +30,9 @@ async function uniqueSlug(base: string): Promise<string> {
   const root = slugify(base) || "org";
   let slug = root;
   let n = 1;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  const maxAttempts = 1000;
+  let attempts = 0;
+  while (attempts < maxAttempts) {
     const exists = await db.query.organizations.findFirst({
       where: eq(organizations.slug, slug),
       columns: { id: true },
@@ -39,6 +40,10 @@ async function uniqueSlug(base: string): Promise<string> {
     if (!exists) break;
     slug = `${root}-${n}`;
     n += 1;
+    attempts += 1;
+  }
+  if (attempts >= maxAttempts) {
+    slug = `${root}-${Date.now()}`;
   }
   return slug;
 }

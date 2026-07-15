@@ -4,6 +4,7 @@ import { branchApprovalRequests } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function POST(
   req: Request,
@@ -46,7 +47,7 @@ export async function POST(
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("Reject request error:", error);
+    logger.error("Reject request error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -6,6 +6,7 @@ import { requireApiContext } from "@/lib/session";
 import { taxReportGenerateSchema } from "@/lib/validations";
 import { createTaxReport, getPeriodBounds } from "@/lib/compliance/reports";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ report, data }, { status: 201 });
   } catch (error) {
-    console.error("Generate tax report error:", error);
+    logger.error("Generate tax report error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

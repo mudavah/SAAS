@@ -5,6 +5,7 @@ import { posSessionSchema } from "@/lib/validations";
 import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { openSession, closeSession, getActiveSession } from "@/lib/pos/service";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "pos.shift.manage");
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result, { status: result.status });
   } catch (error) {
-    console.error("Open session error:", error);
+    logger.error("Open session error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

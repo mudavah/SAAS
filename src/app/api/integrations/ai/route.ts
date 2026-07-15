@@ -5,6 +5,7 @@ import {
   generateIntegrationInsights,
 } from "@/lib/integrations";
 import { IntegrationError } from "@/lib/integrations/core";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   const res = await requireApiContext(req, "integrations.view");
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     if (error instanceof IntegrationError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Integration AI error:", error);
+    logger.error("Integration AI error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

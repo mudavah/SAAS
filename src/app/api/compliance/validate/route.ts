@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { complianceValidateSchema } from "@/lib/validations";
 import { validateKraPin, validateEtimsInvoice } from "@/lib/mpesa";
+import { logger } from "@/lib/logger";
 
 function num(v: string | number | null | undefined): number {
   if (v == null) return 0;
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Compliance validate error:", error);
+    logger.error("Compliance validate error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -4,6 +4,7 @@ import { procurementRfqs } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { createRfq } from "@/lib/procurement/service";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "purchasing.rfq.manage");
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(result.rfq, { status: result.status });
   } catch (error) {
-    console.error("Create RFQ error:", error);
+    logger.error("Create RFQ error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

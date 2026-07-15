@@ -37,7 +37,7 @@ export function generateInvoiceNumber(prefix = "INV"): string {
 
 export function getCurrentMonth(): string {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return now.toISOString().slice(0, 7);
 }
 
 export const PLAN_LIMITS = {

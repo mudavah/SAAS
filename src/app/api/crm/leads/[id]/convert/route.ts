@@ -7,6 +7,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { ensureDefaultPipelineStages } from "@/lib/crm/pipeline";
+import { logger } from "@/lib/logger";
 
 interface ConvertBody {
   createCompany?: boolean;
@@ -160,12 +161,12 @@ export async function POST(
         metadata: { companyId: result.companyId, dealId: result.dealId },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.lead.converted):", e);
+      logger.error("Timeline emit failed (crm.lead.converted):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    console.error("Convert lead error:", error);
+    logger.error("Convert lead error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

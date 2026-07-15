@@ -44,6 +44,6 @@ EXPOSE 3000
 
 # Healthchecks use the liveness/readiness probes.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD curl -fsS http://localhost:3000/api/health/live || exit 1
+    CMD node -e "fetch('http://localhost:3000/api/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]

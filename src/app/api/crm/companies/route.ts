@@ -7,6 +7,7 @@ import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "crm.view");
@@ -81,12 +82,12 @@ export async function POST(req: Request) {
         metadata: { industry: company.industry },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.company.created):", e);
+      logger.error("Timeline emit failed (crm.company.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     return NextResponse.json(company, { status: 201 });
   } catch (error) {
-    console.error("Create company error:", error);
+    logger.error("Create company error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

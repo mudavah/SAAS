@@ -9,7 +9,7 @@
  * allow-by-default behavior, preventing a Redis outage from taking the API
  * down (fail-open). Enable by setting REDIS_URL.
  */
-import type { RateLimitStore } from "./rate-limit";
+import type { RateLimitStore, RateLimitResult } from "./rate-limit";
 
 interface RlWindow {
   count: number;
@@ -74,6 +74,31 @@ export function createRedisRateLimitStore(): RateLimitStore {
         await client.del(`rl:${key}`);
       } catch {
         /* ignore */
+      }
+    },
+    async increment(key: string, windowMs: number, limit: number): Promise<RateLimitResult> {
+      const client = await loadClient();
+      if (!client) {
+        return { allowed: true, limit, remaining: limit, resetAt: Date.now() + windowMs };
+      }
+      try {
+        const redisKey = `rl:${key}`;
+        const count = await client.incr(redisKey);
+        if (count === 1) {
+          const ttlSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+          await client.expire(redisKey, ttlSeconds);
+        }
+        const ttl = await client.ttl(redisKey);
+        const resetAt = Date.now() + Math.max(1, ttl) * 1000;
+        const allowed = count <= limit;
+        return {
+          allowed,
+          limit,
+          remaining: Math.max(0, limit - count),
+          resetAt,
+        };
+      } catch {
+        return { allowed: true, limit, remaining: limit, resetAt: Date.now() + windowMs };
       }
     },
   };

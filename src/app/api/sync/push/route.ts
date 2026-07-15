@@ -10,6 +10,7 @@ import {
 import { eq, and, desc, gt, sql } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import type { PendingOperation } from "@/lib/offline/schema";
+import { logger } from "@/lib/logger";
 
 const ENTITY_SCHEMAS: Record<string, typeof clients | typeof inventoryProducts | typeof invoices | typeof payments | typeof expenses> = {
   clients,
@@ -140,7 +141,7 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   } catch (error) {
-    console.error("Sync push error:", error);
+    logger.error("Sync push error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

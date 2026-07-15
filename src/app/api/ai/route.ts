@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm";
 import { getCurrentMonth, PLAN_LIMITS, type PlanType } from "@/lib/utils";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   const res = await requireApiContext(req, "ai.access");
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ content });
   } catch (error) {
-    console.error("AI error:", error);
+    logger.error("AI error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "AI generation failed" },
       { status: 500 }

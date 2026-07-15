@@ -8,6 +8,7 @@ import {
   ensureDefaultCalendar,
 } from "@/lib/compliance/calendar";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
     try {
       await ensureDefaultCalendar(ctx.organizationId);
     } catch (err) {
-      console.error("ensureDefaultCalendar failed:", err);
+      logger.error("ensureDefaultCalendar failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     }
   }
 
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
-    console.error("Create calendar event error:", error);
+    logger.error("Create calendar event error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

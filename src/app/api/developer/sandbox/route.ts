@@ -7,6 +7,7 @@ import { requireApiContext } from "@/lib/session";
 import { getCorsHeaders } from "@/lib/api/cors";
 import { createSandboxSession, listSandboxSessions } from "@/lib/api/sandbox";
 import { emitDeveloperEvent } from "@/lib/api/events";
+import { logger } from "@/lib/logger";
 
 const createSessionSchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
       { status: 201, headers: getCorsHeaders(req) }
     );
   } catch (error) {
-    console.error("Create sandbox session error:", error);
+    logger.error("Create sandbox session error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: getCorsHeaders(req) }

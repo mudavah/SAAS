@@ -7,6 +7,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { z } from "zod";
+import { logger } from "@/lib/logger";
 
 const stageMoveSchema = z.object({
   stageId: z.string().min(1),
@@ -94,7 +95,7 @@ export async function PATCH(
         metadata: { stageName: stage.name, status },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.deal won/lost):", e);
+      logger.error("Timeline emit failed (crm.deal won/lost):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiContext } from "@/lib/session";
 import { getEmployeeDocuments, uploadEmployeeDocument } from "@/lib/hr/service";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "hr.documents.manage");
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(result.document, { status: result.status });
   } catch (error) {
-    console.error("Upload document error:", error);
+    logger.error("Upload document error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

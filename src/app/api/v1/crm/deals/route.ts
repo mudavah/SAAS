@@ -4,6 +4,7 @@ import { crmDeals } from "@/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { handleApi, type ServerContext } from "@/lib/session";
 import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
+import { logger } from "@/lib/logger";
 
 export async function OPTIONS(req: Request) {
   return corsResponse(null, 204, req);
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
         { status: 201, headers: getCorsHeaders(req) }
       );
     } catch (error) {
-      console.error("API create deal error:", error);
+      logger.error("API create deal error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       return NextResponse.json(
         { error: "Internal server error" },
         { status: 500, headers: getCorsHeaders(req) }
@@ -83,7 +84,7 @@ export async function DELETE(req: Request) {
         { headers: getCorsHeaders(req) }
       );
     } catch (error) {
-      console.error("API delete deal error:", error);
+      logger.error("API delete deal error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       return NextResponse.json(
         { error: "Internal server error" },
         { status: 500, headers: getCorsHeaders(req) }

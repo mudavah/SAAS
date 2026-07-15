@@ -13,6 +13,7 @@ import type {
 import { openDB, get, put, del } from "@/lib/offline/db";
 import { queueOfflineChange, processSyncQueue } from "@/lib/sync/engine";
 import type { PendingOperation } from "@/lib/offline/schema";
+import { logger } from "@/lib/logger";
 
 type EntityType = "clients" | "products" | "invoices" | "payments" | "expenses" | "settings";
 
@@ -190,7 +191,7 @@ export function useOptimisticMutation<T extends Record<string, unknown>>(): UseO
               pending.rollback.onRollback?.(pending.rollback.original);
             }
           } catch {
-            console.error(`Failed to rollback ${key}`);
+            logger.error("Failed to rollback ${key}");
           }
         }
 
@@ -214,7 +215,7 @@ export function useOptimisticMutation<T extends Record<string, unknown>>(): UseO
         await put(db, pending.entity, pending.rollback.original);
         pending.rollback.onRollback?.(pending.rollback.original);
       } catch {
-        console.error(`Failed to rollback ${key}`);
+        logger.error("Failed to rollback ${key}");
       }
     }
 

@@ -4,6 +4,7 @@ import { paymentLinks, invoices, clients, payments } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { createPayment } from "@/lib/payments/engine";
 import { requireApiContext } from "@/lib/session";
+import { logger } from "@/lib/logger";
 
 function generateSlug(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ link }, { status: 201 });
   } catch (error) {
-    console.error("Payment link error:", error);
+    logger.error("Payment link error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Failed to create payment link" }, { status: 500 });
   }
 }

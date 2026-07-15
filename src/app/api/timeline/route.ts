@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiContext } from "@/lib/session";
 import { listTimelineEvents } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "timeline.view");
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Timeline fetch error:", error);
+    logger.error("Timeline fetch error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

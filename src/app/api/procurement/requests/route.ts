@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { createPurchaseRequest } from "@/lib/procurement/service";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "purchasing.requests.manage");
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json(result.request, { status: result.status });
   } catch (error) {
-    console.error("Create purchase request error:", error);
+    logger.error("Create purchase request error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

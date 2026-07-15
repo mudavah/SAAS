@@ -11,6 +11,7 @@ import {
 } from "@/lib/stripe";
 import type Stripe from "stripe";
 import { requireApiContext } from "@/lib/session";
+import { logger } from "@/lib/logger";
 
 export async function GET() {
   return NextResponse.json(getStripeConfigStatus());
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error) {
-    console.error("Stripe checkout error:", error);
+    logger.error("Stripe checkout error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
 
     const stripeError = error as Stripe.errors.StripeError;
     const message =

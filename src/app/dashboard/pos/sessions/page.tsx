@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { Clock, Play, Square, DollarSign } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 export default function PosSessionsPage() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -36,7 +37,7 @@ export default function PosSessionsPage() {
         setActiveSession(data.active);
       }
     } catch (e) {
-      console.error("Failed to load sessions:", e);
+      logger.error("Failed to load sessions:", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     } finally {
       setIsLoading(false);
     }

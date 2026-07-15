@@ -6,6 +6,7 @@ import { eq, asc, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "crm.view");
@@ -103,12 +104,12 @@ export async function POST(req: Request) {
         metadata: { companyId: contact.companyId },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.contact.created):", e);
+      logger.error("Timeline emit failed (crm.contact.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     return NextResponse.json(contact, { status: 201 });
   } catch (error) {
-    console.error("Create contact error:", error);
+    logger.error("Create contact error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

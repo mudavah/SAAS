@@ -4,6 +4,7 @@ import {
   passwordResetEmailHtml,
 } from "./templates";
 import { isPlaceholder } from "@/lib/validation-helpers";
+import { logger } from "@/lib/logger";
 
 export function isEmailConfigured(): boolean {
   const key = process.env.RESEND_API_KEY;
@@ -131,12 +132,12 @@ export async function sendInviteEmail({
         </div>`,
     });
     if (error) {
-      console.error("Invite email failed:", error.message);
+      logger.error("Invite email failed", { error: error.message });
       return { success: false };
     }
     return { success: true };
   } catch (err) {
-    console.error("Invite email error:", err);
+    logger.error("Invite email error:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     return { success: false };
   }
 }
@@ -174,12 +175,12 @@ export async function sendNotificationEmail({
         </div>`,
     });
     if (error) {
-      console.error("Notification email failed:", error.message);
+      logger.error("Notification email failed", { error: error.message });
       return { success: false };
     }
     return { success: true };
   } catch (err) {
-    console.error("Notification email error:", err);
+    logger.error("Notification email error:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     return { success: false };
   }
 }

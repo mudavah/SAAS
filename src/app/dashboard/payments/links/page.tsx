@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Copy, ExternalLink, Link2, Trash2, Loader2 } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 interface PaymentLink {
   id: string;
@@ -46,7 +47,7 @@ export default function PaymentLinksPage() {
       const data = await res.json();
       setLinks(data.links || []);
     } catch (error) {
-      console.error("Failed to fetch payment links:", error);
+      logger.error("Failed to fetch payment links:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     } finally {
       setLoading(false);
     }

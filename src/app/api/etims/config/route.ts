@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { encryptConfigSecrets, decryptConfigSecrets } from "@/lib/crypto";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(config, { status: 201 });
   } catch (error) {
-    console.error("Save eTIMS config error:", error);
+    logger.error("Save eTIMS config error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -8,6 +8,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { scoreLead } from "@/lib/crm/scoring";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "crm.view");
@@ -92,12 +93,12 @@ export async function POST(req: Request) {
         metadata: { source: lead.source, score },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.lead.created):", e);
+      logger.error("Timeline emit failed (crm.lead.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     return NextResponse.json(lead, { status: 201 });
   } catch (error) {
-    console.error("Create lead error:", error);
+    logger.error("Create lead error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

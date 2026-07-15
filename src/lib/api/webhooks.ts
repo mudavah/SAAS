@@ -13,6 +13,7 @@ import { db } from "@/db";
 import { webhooks, webhookDeliveries } from "@/db/schema";
 import { eq, and, desc, lt } from "drizzle-orm";
 import type { Webhook, WebhookDelivery } from "@/db/schema";
+import { logger } from "@/lib/logger";
 
 const MAX_DELIVERY_ATTEMPTS = 5;
 const INITIAL_RETRY_DELAY_MS = 1000;
@@ -168,7 +169,13 @@ export async function deliverWebhook(
     .returning();
 
   // Enqueue delivery attempt (fire-and-forget)
-  attemptDelivery(delivery.id, webhook).catch(console.error);
+  attemptDelivery(delivery.id, webhook).catch((err) => {
+    logger.error("Webhook delivery failed", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      deliveryId: delivery.id,
+    });
+  });
 
   return delivery;
 }
@@ -279,7 +286,13 @@ async function handleFailedDelivery(
     }).then((record) => {
       const webhook = record?.webhook as unknown as Webhook | undefined;
       if (webhook) {
-        attemptDelivery(deliveryId, webhook).catch(console.error);
+        attemptDelivery(deliveryId, webhook).catch((err) => {
+          logger.error("Webhook retry failed", {
+            error: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+            deliveryId,
+          });
+        });
       }
     });
   }, delay);
@@ -330,6 +343,12 @@ export async function retryWebhookDelivery(
     })
     .where(eq(webhookDeliveries.id, deliveryId));
 
-  attemptDelivery(deliveryId, webhook).catch(console.error);
+  attemptDelivery(deliveryId, webhook).catch((err) => {
+    logger.error("Webhook retry delivery failed", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      deliveryId,
+    });
+  });
   return delivery;
 }

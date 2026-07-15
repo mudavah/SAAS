@@ -6,6 +6,7 @@ import { eq, asc, and } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { getPipelineStages, ensureDefaultPipelineStages } from "@/lib/crm/pipeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "crm.view");
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(stage, { status: 201 });
   } catch (error) {
-    console.error("Create pipeline stage error:", error);
+    logger.error("Create pipeline stage error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

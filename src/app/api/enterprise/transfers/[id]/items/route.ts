@@ -4,6 +4,7 @@ import { interBranchTransferItems } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(
   _req: Request,
@@ -68,7 +69,7 @@ export async function POST(
 
     return NextResponse.json(item, { status: 201 });
   } catch (error) {
-    console.error("Add transfer item error:", error);
+    logger.error("Add transfer item error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -121,7 +122,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Remove transfer item error:", error);
+    logger.error("Remove transfer item error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

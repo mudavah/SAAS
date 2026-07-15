@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
 import { clients, invoices, invoiceItems, usageRecords } from "@/db/schema";
 import { invoiceSchema } from "@/lib/validations";
@@ -9,6 +10,7 @@ import {
 } from "@/lib/session";
 import { generateInvoiceNumber, getCurrentMonth, PLAN_LIMITS } from "@/lib/utils";
 import { getCorsHeaders, corsResponse } from "@/lib/api/cors";
+import { logger } from "@/lib/logger";
 
 export async function OPTIONS(req: Request) {
   return corsResponse(null, 204, req);
@@ -26,11 +28,15 @@ export async function GET(req: Request) {
   });
 }
 
+const invoiceCreateSchema = invoiceSchema.extend({
+  send: z.boolean().optional().default(false),
+});
+
 export async function POST(req: Request) {
   return handleApi(req, "invoices.create", async (ctx: ServerContext) => {
     try {
       const body = await req.json();
-      const parsed = invoiceSchema.safeParse(body);
+      const parsed = invoiceCreateSchema.safeParse(body);
       if (!parsed.success) {
         return NextResponse.json(
           { error: parsed.error.errors[0].message },
@@ -58,7 +64,7 @@ export async function POST(req: Request) {
         }
       }
 
-      const { items, ...invoiceData } = parsed.data;
+      const { items, send, ...invoiceData } = parsed.data;
 
       if (invoiceData.clientId) {
         const client = await db.query.clients.findFirst({
@@ -99,8 +105,8 @@ export async function POST(req: Request) {
           total: total.toFixed(2),
           notes: invoiceData.notes,
           terms: invoiceData.terms,
-          status: body.send ? "sent" : "draft",
-          sentAt: body.send ? new Date() : null,
+          status: send ? "sent" : "draft",
+          sentAt: send ? new Date() : null,
         })
         .returning();
 
@@ -144,7 +150,7 @@ export async function POST(req: Request) {
         { status: 201, headers: getCorsHeaders(req) }
       );
     } catch (error) {
-      console.error("API create invoice error:", error);
+      logger.error("API create invoice error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       return NextResponse.json(
         { error: "Internal server error" },
         { status: 500, headers: getCorsHeaders(req) }

@@ -93,6 +93,20 @@ async function deriveWebKey(): Promise<CryptoKey | null> {
   ]);
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(bytes).toString("base64");
+  }
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  if (typeof Buffer !== "undefined") {
+    return new Uint8Array(Buffer.from(base64, "base64"));
+  }
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+}
+
 /** Encrypt a single sensitive field. Returns the input unchanged when no key is set. */
 export async function encryptField(
   plain: string | undefined | null
@@ -116,7 +130,6 @@ export async function encryptField(
     enc.encode(plain)
   );
   const buf = new Uint8Array(ct);
-  // AES-GCM output is ciphertext followed by the 16-byte auth tag.
   const ciphertextLen = buf.byteLength - TAG_BYTES;
   const out = new Uint8Array(IV_BYTES + TAG_BYTES + ciphertextLen);
   const ciphertext = buf.subarray(0, ciphertextLen);
@@ -124,7 +137,7 @@ export async function encryptField(
   out.set(iv, 0);
   out.set(tag, IV_BYTES);
   out.set(ciphertext, IV_BYTES + TAG_BYTES);
-  return WEB_PREFIX + btoa(String.fromCharCode(...out));
+  return WEB_PREFIX + uint8ArrayToBase64(out);
 }
 
 /** Decrypt a single field produced by `encryptField`. Plaintext passes through. */
@@ -138,16 +151,19 @@ export async function decryptField(
     return value;
   }
   const subtle = getSubtle()!;
-  const bytes = Uint8Array.from(atob(value.slice(WEB_PREFIX.length)), (c) =>
-    c.charCodeAt(0)
-  );
+  const bytes = base64ToUint8Array(value.slice(WEB_PREFIX.length));
   const iv = bytes.subarray(0, IV_BYTES);
+  const ivBuffer = new ArrayBuffer(iv.byteLength);
+  new Uint8Array(ivBuffer).set(iv);
   const tag = bytes.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
   const ciphertext = bytes.subarray(IV_BYTES + TAG_BYTES);
+  const combined = new Uint8Array(ciphertext.length + tag.length);
+  combined.set(ciphertext, 0);
+  combined.set(tag, ciphertext.length);
   const pt = await subtle.decrypt(
-    { name: WEB_ALGO, iv, additionalData: undefined, tagLength: 128 },
+    { name: WEB_ALGO, iv: ivBuffer, additionalData: undefined, tagLength: 128 },
     key,
-    new Uint8Array([...ciphertext, ...tag])
+    combined as any
   );
   return new TextDecoder().decode(pt);
 }

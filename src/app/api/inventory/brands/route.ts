@@ -5,6 +5,7 @@ import { inventoryBrandSchema } from "@/lib/validations";
 import { eq, asc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "inventory.view");
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(brand, { status: 201 });
   } catch (error) {
-    console.error("Create brand error:", error);
+    logger.error("Create brand error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

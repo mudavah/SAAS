@@ -23,6 +23,7 @@ export interface RateLimitStore {
   get(key: string): Promise<Window | undefined>;
   set(key: string, value: Window): Promise<void>;
   delete(key: string): Promise<void>;
+  increment?(key: string, windowMs: number, limit: number): Promise<RateLimitResult>;
 }
 
 /** In-memory store. DEFAULT — keeps existing behavior unchanged. */
@@ -75,6 +76,11 @@ export async function rateLimit(
 ): Promise<RateLimitResult> {
   const windowMs = opts.windowMs ?? DEFAULT_WINDOW_MS;
   const now = Date.now();
+
+  if (rateLimitStore.increment) {
+    return rateLimitStore.increment(opts.key, windowMs, opts.limit);
+  }
+
   const existing = await rateLimitStore.get(opts.key);
 
   if (!existing || existing.resetAt <= now) {
@@ -90,6 +96,7 @@ export async function rateLimit(
 
   existing.count += 1;
   const allowed = existing.count <= opts.limit;
+  await rateLimitStore.set(opts.key, existing);
   return {
     allowed,
     limit: opts.limit,

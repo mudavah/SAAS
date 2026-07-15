@@ -8,6 +8,7 @@ import { requireWebhookSecret } from "@/lib/payments/webhook-auth";
 import { createAuditLog } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { toCents, fromCents } from "@/lib/money";
+import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
   try {
@@ -143,7 +144,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("Pesapal webhook error:", error);
+    logger.error("Pesapal webhook error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Webhook failed" }, { status: 500 });
   }
 }

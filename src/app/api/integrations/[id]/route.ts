@@ -8,6 +8,7 @@ import {
 } from "@/lib/integrations";
 import { publicIntegration } from "@/lib/integrations/serialize";
 import { IntegrationError } from "@/lib/integrations/core";
+import { logger } from "@/lib/logger";
 
 export async function GET(
   req: Request,
@@ -50,7 +51,7 @@ export async function PATCH(
     if (error instanceof IntegrationError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Update integration error:", error);
+    logger.error("Update integration error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -77,7 +78,7 @@ export async function DELETE(
     if (error instanceof IntegrationError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Disconnect integration error:", error);
+    logger.error("Disconnect integration error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

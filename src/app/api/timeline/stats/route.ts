@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiContext } from "@/lib/session";
 import { getTimelineStats } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "timeline.view");
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
     const stats = await getTimelineStats(ctx.organizationId, days);
     return NextResponse.json(stats);
   } catch (error) {
-    console.error("Timeline stats error:", error);
+    logger.error("Timeline stats error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

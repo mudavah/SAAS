@@ -6,6 +6,7 @@
  */
 import { db } from "@/db";
 import { apiUsage } from "@/db/schema";
+import { logger } from "@/lib/logger";
 
 export async function recordApiUsage(input: {
   apiKeyId: string;
@@ -25,6 +26,6 @@ export async function recordApiUsage(input: {
       responseTimeMs: input.responseTimeMs,
     });
   } catch (err) {
-    console.error("API usage recording failed:", err);
+    logger.error("API usage recording failed:", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   }
 }

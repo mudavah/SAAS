@@ -8,6 +8,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { generateInvoiceNumber } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 function round2(n: number): string {
   return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
         metadata: { number: quotation.quotationNumber, total: quotation.total },
       });
     } catch (e) {
-      console.error("Timeline emit failed (crm.quotation.created):", e);
+      logger.error("Timeline emit failed (crm.quotation.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     const full = await db.query.crmQuotations.findFirst({
@@ -143,7 +144,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(full, { status: 201 });
   } catch (error) {
-    console.error("Create quotation error:", error);
+    logger.error("Create quotation error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

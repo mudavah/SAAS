@@ -6,6 +6,7 @@ import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { invoiceUpdateSchema } from "@/lib/validations";
 import { emitTimelineEvent } from "@/lib/timeline";
+import { logger } from "@/lib/logger";
 
 export async function GET(
   req: Request,
@@ -88,7 +89,7 @@ export async function PATCH(
       metadata: { invoiceNumber: updated.invoiceNumber, status: updated.status },
     });
   } catch (e) {
-    console.error("Timeline emit failed (invoice.updated):", e);
+    logger.error("Timeline emit failed (invoice.updated):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return NextResponse.json(updated);
@@ -127,7 +128,7 @@ export async function DELETE(
       resourceId: id,
     });
   } catch (e) {
-    console.error("Timeline emit failed (invoice.deleted):", e);
+    logger.error("Timeline emit failed (invoice.deleted):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
   }
 
   return NextResponse.json({ success: true });

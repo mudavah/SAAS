@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, CreditCard, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { PRICING } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 interface Subscription {
   id: string;
@@ -38,7 +39,7 @@ export default function SubscriptionsPage() {
       setSubscription(data.subscriptions?.[0] || null);
       setPlan(data.plan || "free");
     } catch (error) {
-      console.error("Failed to fetch subscription:", error);
+      logger.error("Failed to fetch subscription:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     } finally {
       setLoading(false);
     }

@@ -14,6 +14,7 @@ import { logAuditSafe } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
 import { emitTimelineEvent } from "@/lib/timeline";
 import { dispatchBusinessEvent } from "@/lib/automation/engine";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "invoices.view");
@@ -179,7 +180,7 @@ export async function POST(req: Request) {
         metadata: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, status: invoice.status },
       });
     } catch (e) {
-      console.error("Timeline emit failed (invoice.created):", e);
+      logger.error("Timeline emit failed (invoice.created):", { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined });
     }
 
     // Fire event-driven automations (best-effort, non-blocking).
@@ -192,7 +193,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
-    console.error("Create invoice error:", error);
+    logger.error("Create invoice error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
