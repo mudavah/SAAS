@@ -1,14 +1,35 @@
 /**
  * KaziFlow — production environment validation (Production Environment Config)
  * ------------------------------------------------------------------
- * Validates that the environment is correctly configured for production. This
- * is intentionally NON-FATAL: it logs warnings (and, in production, a single
- * aggregated error-level record) but never throws, so a missing optional key
- * can't crash boot. Operators get a clear checklist of what to set.
+ * Validates that the environment is correctly configured for production. Most
+ * checks are intentionally NON-FATAL (logged as a checklist) so a missing
+ * optional key can't crash boot. The encryption key, however, is FAIL-CLOSED:
+ * without `APP_ENCRYPTION_KEY` in production, secret-bearing writes would
+ * silently persist plaintext, so the server refuses to start (see
+ * `requireProductionSecretsConfigured`).
  *
  * Wire it from src/instrumentation.ts (register()) so it runs once at boot.
  */
 import { logger } from "@/lib/logger";
+
+/**
+ * Hard gate for production boot. Throws if a required secret that protects
+ * data-at-rest is missing — we must not start a prod instance that would store
+ * integration credentials / eTIMS PINs in clear text.
+ */
+export function requireProductionSecretsConfigured(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  const missing = PROD_REQUIRED.filter(
+    (c) => c.secret && !(process.env[c.key] && process.env[c.key]!.trim().length > 0)
+  ).map((c) => c.key);
+  if (missing.length) {
+    throw new Error(
+      `Refusing to start in production: missing required secret(s): ${missing.join(
+        ", "
+      )}. Set them before boot (secrets are stored encrypted at rest).`
+    );
+  }
+}
 
 export interface EnvCheck {
   key: string;

@@ -70,7 +70,10 @@ export default function NewInvoicePage() {
 
   useEffect(() => {
     fetch("/api/clients")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load clients");
+        return r.json();
+      })
       .then(setClients)
       .catch(() => {});
   }, []);
@@ -90,6 +93,10 @@ export default function NewInvoicePage() {
           tone: "professional",
         }),
       });
+      if (!res.ok) {
+        toast({ title: "Error", description: "Failed to generate description", variant: "destructive" });
+        return;
+      }
       const data = await res.json();
       if (data.content) {
         setValue(`items.${index}.description`, data.content);

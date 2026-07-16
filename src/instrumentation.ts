@@ -11,7 +11,7 @@ export async function register(): Promise<void> {
   const [
     { registerGlobalErrorHandlers },
     { initErrorMonitoring },
-    { validateProductionEnv },
+    { validateProductionEnv, requireProductionSecretsConfigured },
   ] = await Promise.all([
     import("@/lib/monitoring/middleware"),
     import("@/lib/error-monitoring"),
@@ -20,6 +20,9 @@ export async function register(): Promise<void> {
 
   registerGlobalErrorHandlers();
   await initErrorMonitoring();
-  // Non-fatal: logs a checklist of missing env keys; never throws.
+  // Non-fatal checklist of missing env keys.
   validateProductionEnv();
+  // Fail-closed: refuse to boot in production without the secret-encryption key
+  // (otherwise credentials would be persisted in plaintext).
+  requireProductionSecretsConfigured();
 }

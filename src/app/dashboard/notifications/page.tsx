@@ -11,7 +11,7 @@ type Notification = {
   title: string;
   message: string;
   type: string;
-  readAt: string | null;
+  read: boolean;
   createdAt: string;
 };
 
@@ -25,7 +25,7 @@ export default function NotificationsPage() {
     const data = await res.json();
     if (data.notifications) {
       setNotifications(data.notifications);
-      unreadCount.current = data.notifications.filter((n: Notification) => !n.readAt).length;
+      unreadCount.current = data.notifications.filter((n: Notification) => !n.read).length;
     }
     setLoading(false);
   }, []);
@@ -37,7 +37,7 @@ export default function NotificationsPage() {
       body: JSON.stringify({ notificationId: id, action: "read" }),
     });
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n))
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   }
 
@@ -50,7 +50,7 @@ export default function NotificationsPage() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }
 
-  const unread = notifications.filter((n) => !n.readAt).length;
+  const unread = notifications.filter((n) => !n.read).length;
 
   const typeColors: Record<string, string> = {
     invoice: "bg-blue-100 text-blue-800",
@@ -91,7 +91,7 @@ export default function NotificationsPage() {
               <div
                 key={notif.id}
                 className={`border rounded-lg p-4 flex items-start justify-between gap-4 ${
-                  notif.readAt ? "bg-card" : "bg-kazi-green/5 border-kazi-green/20"
+                  notif.read ? "bg-card" : "bg-kazi-green/5 border-kazi-green/20"
                 }`}
               >
                 <div className="flex-1">
@@ -105,7 +105,7 @@ export default function NotificationsPage() {
                   <p className="text-xs text-muted-foreground">{new Date(notif.createdAt).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-2">
-                  {!notif.readAt && (
+                  {!notif.read && (
                     <Button
                       size="sm"
                       variant="ghost"

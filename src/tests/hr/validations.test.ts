@@ -185,4 +185,61 @@ describe("HR Validation Schemas", () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe("documentSchema (file upload hardening)", () => {
+    const baseValid = {
+      employeeId: "emp-1",
+      documentType: "contract",
+      fileName: "contract.pdf",
+      fileUrl: "https://storage.kaziflow.com/contract.pdf",
+      fileSize: 1024,
+      mimeType: "application/pdf",
+    };
+
+    it("should accept a valid document upload", () => {
+      expect(documentSchema.safeParse(baseValid).success).toBe(true);
+    });
+
+    it("should accept blob: and data: urls", () => {
+      expect(
+        documentSchema.safeParse({ ...baseValid, fileUrl: "blob:abc" }).success
+      ).toBe(true);
+      expect(
+        documentSchema.safeParse({ ...baseValid, fileUrl: "data:image/png;base64,AAA" })
+          .success
+      ).toBe(true);
+    });
+
+    it("should reject non-https / dangerous url schemes", () => {
+      expect(
+        documentSchema.safeParse({ ...baseValid, fileUrl: "javascript:alert(1)" })
+          .success
+      ).toBe(false);
+      expect(
+        documentSchema.safeParse({ ...baseValid, fileUrl: "http://insecure.test/x" })
+          .success
+      ).toBe(false);
+    });
+
+    it("should reject oversized files", () => {
+      expect(
+        documentSchema.safeParse({ ...baseValid, fileSize: 99 * 1024 * 1024 })
+          .success
+      ).toBe(false);
+    });
+
+    it("should reject disallowed mime types", () => {
+      expect(
+        documentSchema.safeParse({ ...baseValid, mimeType: "application/x-msdownload" })
+          .success
+      ).toBe(false);
+    });
+
+    it("should reject overly long file names", () => {
+      expect(
+        documentSchema.safeParse({ ...baseValid, fileName: "a".repeat(300) })
+          .success
+      ).toBe(false);
+    });
+  });
 });

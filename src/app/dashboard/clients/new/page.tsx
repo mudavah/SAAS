@@ -36,11 +36,14 @@ export default function NewClientPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      const result = await res.json();
+
       if (!res.ok) {
+        const result = await res.json();
         toast({ title: "Error", description: result.error, variant: "destructive" });
         return;
       }
+
+      const result = await res.json();
       toast({ title: "Client added!", description: `${result.name} has been saved.` });
       router.push("/dashboard/clients");
     } finally {

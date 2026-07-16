@@ -1,5 +1,32 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === "production";
+
+/**
+ * CSP is tightened in production: we drop `'unsafe-eval'` (only needed by the
+ * dev HMR runtime) and the localhost `connect-src` origins. Next.js App Router
+ * still requires `'unsafe-inline'` for RSC/bootstrap scripts, so a hash/nonce
+ * migration is tracked as a follow-up. In dev we keep eval + localhost so HMR
+ * works.
+ */
+const cspValue = [
+  "default-src 'self'",
+  isProd
+    ? "script-src 'self' 'unsafe-inline'"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: lh3.googleusercontent.com avatars.githubusercontent.com",
+  "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com",
+  isProd
+    ? "connect-src 'self' wss:"
+    : "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+
 const nextConfig: NextConfig = {
   output: "standalone",
   eslint: {
@@ -30,20 +57,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              // Next.js relies on inline scripts (RSC/bootstrap) and dev HMR uses eval.
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: lh3.googleusercontent.com avatars.githubusercontent.com",
-              "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com",
-              "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "object-src 'none'",
-              "upgrade-insecure-requests",
-            ].join("; "),
+            value: cspValue,
           },
           {
             key: "Strict-Transport-Security",

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Check } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 interface Task {
   id: string;
@@ -17,11 +18,18 @@ interface Task {
 }
 
 export default function TasksPage() {
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTitle, setNewTitle] = useState("");
 
   useEffect(() => {
-    fetch("/api/tasks").then((r) => r.json()).then(setTasks);
+    fetch("/api/tasks")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load tasks");
+        return r.json();
+      })
+      .then(setTasks)
+      .catch(() => {});
   }, []);
 
   async function addTask() {
@@ -31,6 +39,11 @@ export default function TasksPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: newTitle }),
     });
+    if (!res.ok) {
+      const data = await res.json();
+      toast({ title: "Error", description: data.error || "Failed to add task", variant: "destructive" });
+      return;
+    }
     const task = await res.json();
     setTasks((prev) => [task, ...prev]);
     setNewTitle("");

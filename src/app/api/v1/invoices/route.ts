@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { clients, invoices, invoiceItems, usageRecords } from "@/db/schema";
 import { invoiceSchema } from "@/lib/validations";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, count } from "drizzle-orm";
 import {
   handleApi,
   type ServerContext,
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       limit: Number(url.searchParams.get("limit")) || undefined,
     });
 
-    const [rows, total] = await Promise.all([
+    const [rows, totalResult] = await Promise.all([
       db.query.invoices.findMany({
         where: eq(invoices.organizationId, ctx.organizationId),
         orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
@@ -33,8 +33,10 @@ export async function GET(req: Request) {
         limit,
         offset,
       }),
-      Promise.resolve(0),
+      db.select({ count: count() }).from(invoices).where(eq(invoices.organizationId, ctx.organizationId)),
     ]);
+
+    const total = totalResult[0]?.count ?? 0;
 
     return NextResponse.json(
       { data: rows, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } },

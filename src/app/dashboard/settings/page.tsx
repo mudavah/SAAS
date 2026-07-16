@@ -55,7 +55,7 @@ function SettingsContent() {
     }
   }, [searchParams, toast]);
 
-  async function handleUpgrade(targetPlan: "pro" | "business") {
+   async function handleUpgrade(targetPlan: "pro" | "business") {
     setLoadingPlan(targetPlan);
     try {
       const res = await fetch("/api/stripe/checkout", {
@@ -63,7 +63,6 @@ function SettingsContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: targetPlan }),
       });
-      const data = await res.json();
 
       if (!res.ok) {
         toast({
@@ -76,6 +75,8 @@ function SettingsContent() {
         });
         return;
       }
+
+      const data = await res.json();
 
       if (data.url) {
         window.location.href = data.url;

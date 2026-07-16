@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return handleApi(req, "pos.sales.create", async (ctx: ServerContext) => {
+  return handleApi(req, "pos.sales.delete", async (ctx: ServerContext) => {
     try {
       const id = new URL(req.url).searchParams.get("id");
       if (!id) {

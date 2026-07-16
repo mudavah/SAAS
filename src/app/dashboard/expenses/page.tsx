@@ -21,7 +21,13 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
   useEffect(() => {
-    fetch("/api/expenses").then((r) => r.json()).then(setExpenses);
+    fetch("/api/expenses")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load expenses");
+        return r.json();
+      })
+      .then(setExpenses)
+      .catch(() => {});
   }, []);
 
   const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);

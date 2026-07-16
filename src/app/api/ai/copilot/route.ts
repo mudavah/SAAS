@@ -38,7 +38,10 @@ export async function POST(req: Request) {
       category: "ai",
       resourceType: "ai_copilot",
       description: `Copilot query: ${parsed.data.context.slice(0, 100)}`,
-      newValues: { type: parsed.data.type },
+      newValues: {
+        type: parsed.data.type,
+        contextLength: parsed.data.context.length,
+      },
     });
 
     return NextResponse.json({

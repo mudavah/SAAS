@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/use-toast";
 
 type Member = {
   id: string;
@@ -24,6 +25,7 @@ type Member = {
 };
 
 export default function TeamPage() {
+  const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
   const [orgName, setOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -34,6 +36,10 @@ export default function TeamPage() {
   async function fetchMembers() {
     const res = await fetch("/api/team");
     const data = await res.json();
+    if (!res.ok) {
+      toast({ title: "Error", description: data.error || "Failed to load team", variant: "destructive" });
+      return;
+    }
     if (Array.isArray(data.members)) {
       setMembers(
         data.members.map((m: any) => ({
@@ -55,11 +61,16 @@ export default function TeamPage() {
     if (!inviteEmail) return;
     setLoading(true);
     try {
-      await fetch("/api/team", {
+      const res = await fetch("/api/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: inviteEmail, roleType: inviteRole }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        toast({ title: "Error", description: data.error || "Failed to invite member", variant: "destructive" });
+        return;
+      }
       await fetchMembers();
       setInviteEmail("");
       setInviteRole("employee");
@@ -70,16 +81,26 @@ export default function TeamPage() {
   }
 
   async function removeMember(id: string) {
-    await fetch(`/api/team/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/team/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json();
+      toast({ title: "Error", description: data.error || "Failed to remove member", variant: "destructive" });
+      return;
+    }
     await fetchMembers();
   }
 
   async function updateMemberRole(id: string, roleType: string) {
-    await fetch(`/api/team/${id}`, {
+    const res = await fetch(`/api/team/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roleType }),
     });
+    if (!res.ok) {
+      const data = await res.json();
+      toast({ title: "Error", description: data.error || "Failed to update role", variant: "destructive" });
+      return;
+    }
     await fetchMembers();
   }
 

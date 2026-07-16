@@ -895,13 +895,54 @@ export const offboardingSchema = z.object({
   exitInterviewNotes: z.string().optional(),
 });
 
+// Hardening for file uploads: cap size, restrict to safe MIME types and only
+// allow https/blob data URLs (prevents javascript:/data: URI injection into
+// stored file references). Kept permissive enough for real HR documents.
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024; // 25 MB
+const ALLOWED_DOCUMENT_MIME = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+] as const;
+
+const safeUrl = z
+  .string()
+  .min(1, "File URL is required")
+  .max(2048, "File URL is too long")
+  .refine(
+    (v) => /^https:\/\//i.test(v) || /^blob:/i.test(v) || /^data:/i.test(v),
+    "File URL must be https, blob: or data:"
+  );
+
 export const documentSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
   documentType: z.enum(documentTypeValues),
-  fileName: z.string().min(1, "File name is required"),
-  fileUrl: z.string().min(1, "File URL is required"),
-  fileSize: z.coerce.number().int().min(0).optional(),
-  mimeType: z.string().optional(),
+  fileName: z
+    .string()
+    .min(1, "File name is required")
+    .max(255, "File name is too long"),
+  fileUrl: safeUrl,
+  fileSize: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_DOCUMENT_BYTES, "File exceeds maximum allowed size")
+    .optional(),
+  mimeType: z
+    .string()
+    .max(128)
+    .refine(
+      (v) => !v || (ALLOWED_DOCUMENT_MIME as readonly string[]).includes(v),
+      "Unsupported file type"
+    )
+    .optional(),
   expiresAt: z.coerce.date().optional(),
 });
 

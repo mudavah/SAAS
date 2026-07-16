@@ -25,7 +25,10 @@ export default function CategoriesPage() {
 
   useEffect(() => {
     fetch("/api/inventory/categories")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load categories");
+        return r.json();
+      })
       .then(setCategories)
       .finally(() => setLoading(false));
   }, []);

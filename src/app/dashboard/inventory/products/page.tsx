@@ -32,7 +32,10 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetch("/api/inventory/products")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load products");
+        return r.json();
+      })
       .then((data) => setProducts(data))
       .finally(() => setLoading(false));
   }, []);

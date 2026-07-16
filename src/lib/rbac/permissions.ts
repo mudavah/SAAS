@@ -26,6 +26,7 @@ export type PermissionKey =
   | "payments.create"
   | "payments.receive"
   | "payments.refund"
+  | "payments.delete"
   | "expenses.view"
   | "expenses.create"
   | "expenses.edit"
@@ -113,6 +114,7 @@ export type PermissionKey =
   | "pos.view"
   | "pos.sales.create"
   | "pos.sales.view"
+  | "pos.sales.delete"
   | "pos.returns"
   | "pos.shift.manage"
   | "pos.settings.manage"
@@ -187,6 +189,7 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "payments.create": { key: "payments.create", category: "payments", name: "Record Payments", description: "Record manual payments" },
   "payments.receive": { key: "payments.receive", category: "payments", name: "Receive Payments", description: "Receive and reconcile payments" },
   "payments.refund": { key: "payments.refund", category: "payments", name: "Refund Payments", description: "Issue refunds" },
+  "payments.delete": { key: "payments.delete", category: "payments", name: "Delete Payments", description: "Delete payments" },
 
   "expenses.view": { key: "expenses.view", category: "expenses", name: "View Expenses", description: "View expenses" },
   "expenses.create": { key: "expenses.create", category: "expenses", name: "Create Expenses", description: "Log expenses" },
@@ -291,6 +294,7 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "pos.view": { key: "pos.view", category: "pos", name: "View POS", description: "View POS dashboard and sales" },
   "pos.sales.create": { key: "pos.sales.create", category: "pos", name: "Create Sales", description: "Create new POS sales and process payments" },
   "pos.sales.view": { key: "pos.sales.view", category: "pos", name: "View Sales", description: "View POS sales history and details" },
+  "pos.sales.delete": { key: "pos.sales.delete", category: "pos", name: "Delete Sales", description: "Delete POS sales orders" },
   "pos.returns": { key: "pos.returns", category: "pos", name: "Process Returns", description: "Process returns and refunds at POS" },
   "pos.shift.manage": { key: "pos.shift.manage", category: "pos", name: "Manage Shifts", description: "Open and close cashier shifts/sessions" },
   "pos.settings.manage": { key: "pos.settings.manage", category: "pos", name: "Manage POS Settings", description: "Configure POS terminals, printers, and payment methods" },
@@ -484,6 +488,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "payments.create",
     "payments.receive",
     "payments.refund",
+    "payments.delete",
     "expenses.view",
     "expenses.create",
     "expenses.edit",
@@ -528,6 +533,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     "pos.view",
     "pos.sales.create",
     "pos.sales.view",
+    "pos.sales.delete",
     "pos.returns",
     "pos.shift.manage",
     "pos.settings.manage",

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { invoices, invoiceItems, clients, usageRecords } from "@/db/schema";
 import { invoiceSchema } from "@/lib/validations";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, count } from "drizzle-orm";
 import {
   generateInvoiceNumber,
   getCurrentMonth,
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     limit: Number(new URL(req.url).searchParams.get("limit")) || undefined,
   });
 
-  const [rows, total] = await Promise.all([
+  const [rows, totalResult] = await Promise.all([
     db.query.invoices.findMany({
       where: eq(invoices.organizationId, ctx.organizationId),
       orderBy: (invoices, { desc }) => [desc(invoices.createdAt)],
@@ -37,8 +37,10 @@ export async function GET(req: Request) {
       limit,
       offset,
     }),
-    Promise.resolve(0),
+    db.select({ count: count() }).from(invoices).where(eq(invoices.organizationId, ctx.organizationId)),
   ]);
+
+  const total = totalResult[0]?.count ?? 0;
 
   return NextResponse.json(
     { data: rows, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } },

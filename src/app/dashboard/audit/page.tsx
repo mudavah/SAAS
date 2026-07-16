@@ -36,6 +36,10 @@ export default function AuditPage() {
     if (filterAction) params.set("action", filterAction);
     const res = await fetch(`/api/audit?${params}`);
     const data = await res.json();
+    if (!res.ok) {
+      setLoading(false);
+      return;
+    }
     if (data.logs) setLogs(data.logs);
     setLoading(false);
   }, [filterType, filterAction]);

@@ -3,11 +3,10 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users, accounts, sessions, verificationTokens, organizationMembers } from "@/db/schema";
 import { loginSchema } from "@/lib/validations";
-import { getActiveOrganization, ensureUserHasOrganization } from "@/lib/org";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
@@ -53,11 +52,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
         if (!valid) return null;
 
+        const membership = await db.query.organizationMembers.findFirst({
+          where: eq(organizationMembers.userId, user.id),
+          with: { organization: true },
+        });
+
+        const org = membership?.organization as { id: string; name: string; slug: string; plan: string } | undefined;
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           image: user.image,
+          plan: user.plan,
+          onboardingComplete: user.onboardingComplete,
+          orgId: org?.id ?? null,
+          roleType: membership?.roleType ?? null,
+          orgName: org?.name ?? null,
+          orgSlug: org?.slug ?? null,
+          orgPlan: org?.plan ?? null,
         };
       },
     }),
@@ -66,57 +79,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
-        const dbUser = await db.query.users.findFirst({
-          where: eq(users.id, user.id!),
-        });
-        if (dbUser) {
-          token.plan = dbUser.plan;
-          token.onboardingComplete = dbUser.onboardingComplete;
-        }
-      }
-
-      // Resolve the user's active organization (tenant) + role.
-      if (token.id) {
-        const active = await getActiveOrganization(token.id as string);
-        if (active) {
-          token.orgId = active.organization.id;
-          token.roleType = active.roleType;
-          token.orgName = active.organization.name;
-          token.orgSlug = active.organization.slug;
-          token.orgPlan = active.organization.plan;
-        } else {
-          // Lazily create a personal organization for any auth method
-          // (e.g. Google sign-in) that didn't go through explicit setup.
-          const created = await ensureUserHasOrganization(token.id as string);
-          if (created) {
-            token.orgId = created.id;
-            token.roleType = "owner";
-            token.orgName = created.name;
-            token.orgSlug = created.slug;
-            token.orgPlan = created.plan;
-          } else {
-            token.orgId = null;
-            token.roleType = null;
-            token.orgName = null;
-            token.orgSlug = null;
-            token.orgPlan = null;
-          }
-        }
+        token.plan = (user as any).plan;
+        token.onboardingComplete = (user as any).onboardingComplete;
+        token.orgId = (user as any).orgId;
+        token.roleType = (user as any).roleType;
+        token.orgName = (user as any).orgName;
+        token.orgSlug = (user as any).orgSlug;
+        token.orgPlan = (user as any).orgPlan;
       }
 
       if (trigger === "update" && session) {
         token.onboardingComplete = session.onboardingComplete;
         token.plan = session.plan;
-        // Allow forcing a re-resolution of the active org (e.g. org switch).
         if ((session as { orgId?: string }).orgId) {
-          const active = await getActiveOrganization(token.id as string);
-          if (active) {
-            token.orgId = active.organization.id;
-            token.roleType = active.roleType;
-            token.orgName = active.organization.name;
-            token.orgSlug = active.organization.slug;
-            token.orgPlan = active.organization.plan;
-          }
+          token.orgId = (session as { orgId?: string }).orgId;
         }
       }
 

@@ -11,7 +11,7 @@ export async function OPTIONS(req: Request) {
 }
 
 export async function GET(req: Request) {
-  return handleApi(req, "inventory.products.manage", async (ctx: ServerContext) => {
+  return handleApi(req, "inventory.view", async (ctx: ServerContext) => {
     const rows = await db.query.inventoryWarehouses.findMany({
       where: eq(inventoryWarehouses.organizationId, ctx.organizationId),
       orderBy: (inventoryWarehouses, { desc }) => [desc(inventoryWarehouses.createdAt)],

@@ -1,5 +1,13 @@
 # KaziFlow Production Readiness Report
 
+> ⚠️ **This report is STALE (2026-07-10).** All 10 critical and 10 high issues it
+> raised have since been remediated. For the current state, read the
+> follow-up hardening reports in `docs/`:
+> - `docs/SECURITY_AUDIT_REPORT.md`
+> - `docs/TESTING_REPORT.md`
+> - `docs/PERFORMANCE_REPORT.md`
+> - `docs/CRITICAL_ISSUES_REPORT.md`
+
 **Date:** 2026-07-10  
 **Reviewer:** Principal Software Engineer (Kilo)  
 **Scope:** Full architecture, security, performance, scalability, database, API, frontend, backend, AI, payment, multi-tenancy, RBAC, audit logging, notification, and code quality review  

@@ -23,8 +23,12 @@ export default function ClientsPage() {
 
   function loadClients() {
     fetch("/api/clients")
-      .then((r) => r.json())
-      .then(setClients);
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load clients");
+        return r.json();
+      })
+      .then(setClients)
+      .catch(() => toast({ title: "Error", description: "Failed to load clients", variant: "destructive" }));
   }
 
   useEffect(() => {
@@ -42,9 +46,9 @@ export default function ClientsPage() {
       const res = await fetch(`/api/clients/${client.id}`, {
         method: "DELETE",
       });
-      const data = await res.json();
 
       if (!res.ok) {
+        const data = await res.json();
         toast({
           title: "Could not delete client",
           description: data.error,
