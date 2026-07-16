@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: lh3.googleusercontent.com avatars.githubusercontent.com",
               "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com",
-              "connect-src 'self' ws: wss:",
+              "connect-src 'self' ws: wss: http://localhost:* http://127.0.0.1:*",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
