@@ -87,3 +87,8 @@ docker compose up -d
 - Watch alerts 24h; keep prior image for instant rollback.
 - Schedule external pentest (≤30 days).
 - Promote ESLint to blocking; tighten CSP to nonce-based.
+
+## 13. Staging
+- See `docs/STAGING_DEPLOYMENT.md` for the staging runbook.
+- Use `docker-compose.staging.yml` and `.env.staging` for staging deployments.
+- Run load tests against staging before production launch.

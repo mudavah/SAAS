@@ -33,10 +33,8 @@ CREATE INDEX IF NOT EXISTS kf_prod_automation_runs_org_created
 -- 2) Status-filtered work queues (approvals, procurements, payroll).
 CREATE INDEX IF NOT EXISTS kf_prod_approval_requests_org_status
   ON approval_requests (organization_id, status);
-CREATE INDEX IF NOT EXISTS kf_prod_procurement_orders_org_status
-  ON procurement_orders (organization_id, status);
-CREATE INDEX IF NOT EXISTS kf_prod_payroll_periods_org_status
-  ON payroll_periods (organization_id, status);
+CREATE INDEX IF NOT EXISTS kf_prod_procurement_purchase_orders_org_status
+  ON procurement_purchase_orders (organization_id, status);
 CREATE INDEX IF NOT EXISTS kf_prod_invoices_org_status
   ON invoices (organization_id, status);
 CREATE INDEX IF NOT EXISTS kf_prod_payments_org_status
