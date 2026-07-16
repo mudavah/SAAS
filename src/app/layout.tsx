@@ -4,9 +4,12 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { ToastContextProvider } from "@/components/ui/use-toast";
+import { GuidedTourProvider } from "@/components/ux/guided-tour";
 import { RegisterSW } from "@/components/pwa/register-sw";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import type { Viewport } from "next";
+import { buildMetadata } from "@/lib/seo/metadata";
+import { SITE_URL } from "@/lib/seo/config";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -49,14 +52,43 @@ export const metadata: Metadata = {
     "msapplication-TileColor": "#006B3F",
     "mobile-web-app-capable": "yes",
   },
+  // Canonical URL + robots sitemap reference (Technical SEO).
+  alternates: {
+    canonical: SITE_URL,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   openGraph: {
     title: "KaziFlow — Business Management for Kenya",
     description:
       "Invoices, clients, payments & AI tools in one affordable platform.",
-    url: "https://kaziflow.co.ke",
+    url: SITE_URL,
     siteName: "KaziFlow",
     locale: "en_KE",
     type: "website",
+    images: [
+      {
+        url: "/og",
+        width: 1200,
+        height: 630,
+        alt: "KaziFlow — Run Your Kenyan Business Smarter",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "KaziFlow — Business Management for Kenya",
+    description:
+      "Invoices, clients, payments & AI tools in one affordable platform.",
+    images: ["/og"],
   },
 };
 
@@ -89,7 +121,9 @@ export default function RootLayout({
         >
           <AuthProvider>
             <QueryProvider>
-              <ToastContextProvider>{children}</ToastContextProvider>
+              <GuidedTourProvider>
+                <ToastContextProvider>{children}</ToastContextProvider>
+              </GuidedTourProvider>
             </QueryProvider>
           </AuthProvider>
         </ThemeProvider>

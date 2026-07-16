@@ -4,6 +4,7 @@ import { invoices, clients, payments, expenses } from "@/db/schema";
 import { eq, and, gte, sql, count, sum } from "drizzle-orm";
 import { DashboardShell } from "@/components/dashboard/sidebar";
 import { DashboardOverview } from "@/components/dashboard/overview";
+import { DashboardTourLauncher } from "@/components/dashboard/tour-launcher";
 import { getActiveOrganization } from "@/lib/org";
 
 async function getDashboardStats(organizationId: string) {
@@ -70,6 +71,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardShell>
+      <DashboardTourLauncher />
       <DashboardOverview stats={stats} userName={session.user.name || ""} />
     </DashboardShell>
   );

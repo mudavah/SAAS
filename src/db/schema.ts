@@ -2432,6 +2432,11 @@ export const usageRecords = pgTable("usage_records", {
   month: text("month").notNull(), // YYYY-MM
   invoicesCreated: integer("invoices_created").default(0).notNull(),
   aiRequests: integer("ai_requests").default(0).notNull(),
+  // AI cost monitoring (additive; nullable for backward compatibility).
+  aiPromptTokens: integer("ai_prompt_tokens").default(0),
+  aiCompletionTokens: integer("ai_completion_tokens").default(0),
+  aiCostCents: integer("ai_cost_cents").default(0),
+  aiModel: text("ai_model"),
 });
 
 // Inventory tables

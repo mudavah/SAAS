@@ -10,6 +10,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ContextualHelp } from "@/components/ux/contextual-help";
+import { EmptyState } from "@/components/ux/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface DashboardOverviewProps {
@@ -65,10 +67,14 @@ export function DashboardOverview({ userName, stats }: DashboardOverviewProps) {
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card data-tour="stats-pending">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
               Pending Invoices
+              <ContextualHelp
+                label="Pending invoices"
+                content="Invoices that have been sent but not yet paid in full. Lower is better — send reminders to collect faster."
+              />
             </CardTitle>
             <FileText className="h-4 w-4 text-kazi-orange" />
           </CardHeader>
@@ -77,7 +83,7 @@ export function DashboardOverview({ userName, stats }: DashboardOverviewProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-tour="stats-clients">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Active Clients
@@ -89,7 +95,7 @@ export function DashboardOverview({ userName, stats }: DashboardOverviewProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-tour="stats-revenue">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Revenue (Month)
@@ -103,7 +109,7 @@ export function DashboardOverview({ userName, stats }: DashboardOverviewProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-tour="stats-net">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Net (Month)
@@ -133,15 +139,18 @@ export function DashboardOverview({ userName, stats }: DashboardOverviewProps) {
           </CardHeader>
           <CardContent>
             {stats.recentInvoices.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>No invoices yet. Create your first one!</p>
-                <Link href="/dashboard/invoices/new">
-                  <Button variant="kazi" size="sm" className="mt-4">
-                    Create Invoice
-                  </Button>
-                </Link>
-              </div>
+              <EmptyState
+                icon={<FileText className="h-6 w-6" />}
+                title="No invoices yet"
+                description="Create your first invoice to start getting paid. It only takes a minute."
+                action={
+                  <Link href="/dashboard/invoices/new">
+                    <Button variant="kazi" size="sm">
+                      Create Invoice
+                    </Button>
+                  </Link>
+                }
+              />
             ) : (
               <div className="space-y-3">
                 {stats.recentInvoices.map((invoice) => (

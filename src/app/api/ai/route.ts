@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { usageRecords } from "@/db/schema";
 import { aiRequestSchema } from "@/lib/validations";
-import { generateAiContent } from "@/lib/ai";
+import { generateAiContentDetailed } from "@/lib/ai";
 import { eq, and } from "drizzle-orm";
 import { getCurrentMonth, PLAN_LIMITS, type PlanType } from "@/lib/utils";
 import { requireApiContext } from "@/lib/session";
 import { logAuditSafe } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import { recordAiUsage } from "@/lib/ai/usage";
 
 export async function POST(req: Request) {
   const res = await requireApiContext(req, "ai.access");
@@ -45,39 +46,42 @@ export async function POST(req: Request) {
       }
     }
 
-    const content = await generateAiContent(parsed.data);
+    const result = await generateAiContentDetailed(parsed.data);
+    const content = result.content;
 
     const month = getCurrentMonth();
-    const existingUsage = await db.query.usageRecords.findFirst({
-      where: and(
-        eq(usageRecords.organizationId, ctx.organizationId),
-        eq(usageRecords.month, month)
-      ),
-    });
 
-    if (existingUsage) {
-      await db
-        .update(usageRecords)
-        .set({ aiRequests: existingUsage.aiRequests + 1 })
-        .where(eq(usageRecords.id, existingUsage.id));
-    } else {
-      await db.insert(usageRecords).values({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId!,
-        month,
-        aiRequests: 1,
-      });
-    }
+    // Record cost + token usage analytics (fail-open; never blocks response).
+    await recordAiUsage({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId!,
+      month,
+      model: result.model ?? (process.env.OPENAI_MODEL || "gpt-4o-mini"),
+      promptTokens: result.promptTokens,
+      completionTokens: result.completionTokens,
+      costCents: result.costCents,
+      cached: result.cached,
+    });
 
     await logAuditSafe(ctx, {
       action: "ai.request",
       category: "ai",
       resourceType: "ai_request",
-      description: `AI request: ${parsed.data.type}`,
-      newValues: { type: parsed.data.type },
+      description: `AI request: ${parsed.data.type}${result.cached ? " (cache hit)" : ""}`,
+      newValues: {
+        type: parsed.data.type,
+        model: result.model,
+        cached: result.cached,
+        costCents: result.costCents,
+      },
     });
 
-    return NextResponse.json({ content });
+    return NextResponse.json({
+      content,
+      cached: result.cached,
+      model: result.model,
+      costCents: result.costCents,
+    });
   } catch (error) {
     logger.error("AI error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json(
