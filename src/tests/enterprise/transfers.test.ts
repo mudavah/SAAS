@@ -1,15 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { createTransfer, listTransfers } from "@/lib/enterprise/transfers";
-import type { ServerContext } from "@/lib/session";
+import { mockServerContext } from "@/tests/helpers/mock-context";
 
-const mockCtx: ServerContext = {
-  userId: "user-1",
-  organizationId: "org-1",
-  roleType: "owner",
-  memberId: "member-1",
+const mockCtx = mockServerContext({
   permissions: new Set(["enterprise.transfers.manage", "enterprise.view"]),
-  authMethod: "session",
-};
+});
 
 describe("Enterprise Transfers", () => {
   it("should export transfer functions", () => {

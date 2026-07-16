@@ -41,5 +41,10 @@ Wired into the load balancer/orchestrator. `ready` verifies DB connectivity and 
 - `scripts/verify-backup.sh` — integrity check (size + restore dry-run).
 - DB indexes applied via `npm run db:optimize` (`scripts/apply-db-indexes.mjs`).
 
-## 8. Required Environment (fail-closed)
+## 8. Infrastructure as Code & Zero-Downtime Deploys
+
+- **Terraform (IaC):** `docs/iac-terraform.md` — reproducible VPC, compute, managed PostgreSQL (PITR), Redis, object storage, TLS, and Prometheus scrape targets. Optional; composes with the Compose path.
+- **Blue/Green deployment:** `docs/blue-green-deployment.md` — zero-downtime cutover with instant rollback. Requires **additive-only migrations** (already enforced by convention) so both pools can share one database during the window.
+
+## 9. Required Environment (fail-closed)
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_APP_URL`, `APP_ENCRYPTION_KEY`. Optional but recommended: `REDIS_URL`, `STRIPE_*`, `OPENAI_API_KEY`, `RESEND_API_KEY`, `MPESA_*`, `SENTRY_DSN`. See `docs/STAGING_DEPLOYMENT.md` and `.env.production.example`.

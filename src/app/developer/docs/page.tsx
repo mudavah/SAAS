@@ -49,7 +49,7 @@ export default function DeveloperDocsPage() {
         <p className="text-muted-foreground">OpenAPI 3.0 specification for KaziFlow Public API</p>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Input
           placeholder="Search endpoints..."
           value={search}
@@ -57,6 +57,12 @@ export default function DeveloperDocsPage() {
           className="max-w-md"
         />
         <Badge variant="secondary">{filteredPaths.length} endpoints</Badge>
+        <a href="/api/openapi.json" target="_blank" rel="noreferrer">
+          <Button variant="outline" size="sm">
+            <BookOpen className="mr-2 h-4 w-4" />
+            OpenAPI JSON
+          </Button>
+        </a>
       </div>
 
       <div className="space-y-4">

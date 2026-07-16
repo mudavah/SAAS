@@ -1,15 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { generateBranchInsights, getBranchInsights } from "@/lib/enterprise/ai";
-import type { ServerContext } from "@/lib/session";
+import { mockServerContext } from "@/tests/helpers/mock-context";
 
-const mockCtx: ServerContext = {
-  userId: "user-1",
-  organizationId: "org-1",
-  roleType: "owner",
-  memberId: "member-1",
+const mockCtx = mockServerContext({
   permissions: new Set(["enterprise.ai.access", "enterprise.view"]),
-  authMethod: "session",
-};
+});
 
 describe("Enterprise AI", () => {
   it("should export AI functions", () => {

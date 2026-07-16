@@ -1,15 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { createBranch, listBranches } from "@/lib/enterprise/branches";
-import type { ServerContext } from "@/lib/session";
+import { mockServerContext } from "@/tests/helpers/mock-context";
 
-const mockCtx: ServerContext = {
-  userId: "user-1",
-  organizationId: "org-1",
-  roleType: "owner",
-  memberId: "member-1",
+const mockCtx = mockServerContext({
   permissions: new Set(["enterprise.branches.manage", "enterprise.view"]),
-  authMethod: "session",
-};
+});
 
 describe("Enterprise Branches", () => {
   it("should have a valid mock context", () => {

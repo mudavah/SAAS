@@ -58,3 +58,5 @@ Caching: deterministic requests are cached for `AI_CACHE_TTL_SECONDS` (default 2
 
 ## 5. Public API (v1)
 Versioned under `/api/v1/*` (invoices, clients, payments, payroll, procurement, CRM, etc.) with API-key auth, scopes, and rate limiting. See `docs/EPIC_7_API_DOCUMENTATION.md`.
+
+A machine-readable **OpenAPI 3.0** document is served at `GET /api/openapi.json` and rendered in the developer portal (`/developer/docs`). It describes the v1 surface (Bearer API-key auth, pagination envelope `{ data, meta }`, standard error shape). Use it for client codegen (e.g. `openapi-typescript`) and API marketplaces.
