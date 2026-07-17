@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const { ctx } = res;
 
   try {
-    const { plan } = await req.json();
+    const { plan, trialDays, coupon } = await req.json();
     if (plan !== "pro" && plan !== "business") {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
@@ -68,7 +68,11 @@ export async function POST(req: Request) {
       priceId,
       ctx.userId!,
       plan,
-      ctx.organizationId
+      ctx.organizationId,
+      {
+        trialDays: typeof trialDays === "number" && trialDays > 0 ? trialDays : undefined,
+        coupon: typeof coupon === "string" && coupon ? coupon : undefined,
+      }
     );
 
     if (!checkoutSession.url) {

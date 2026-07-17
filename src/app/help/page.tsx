@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/marketing/navbar";
 import { Footer } from "@/components/marketing/footer";
@@ -84,12 +87,29 @@ const CATEGORIES: HelpCategory[] = [
 ];
 
 export default function HelpCenterPage() {
+  const [articles, setArticles] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetch("/api/customersuccess/knowledge-base")
+      .then((r) => r.json())
+      .then((d) => setArticles(d.articles ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  const filtered = articles.filter(
+    (a) =>
+      !search ||
+      a.title.toLowerCase().includes(search.toLowerCase()) ||
+      (a.body || "").toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <main>
       <Navbar />
       <div className="container mx-auto px-4 py-16 max-w-4xl">
         <h1 className="text-3xl font-bold mb-2">Help Center</h1>
-        <p className="text-muted-foreground mb-10">
+        <p className="text-muted-foreground mb-6">
           Answers for getting the most out of KaziFlow. For billing or account
           issues, email{" "}
           <a href="mailto:hello@kaziflow.co.ke" className="text-kazi-green underline">
@@ -97,6 +117,29 @@ export default function HelpCenterPage() {
           </a>
           .
         </p>
+
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search the knowledge base…"
+          className="w-full border rounded-lg px-4 py-2 mb-8 bg-background"
+        />
+
+        {filtered.length > 0 && (
+          <section className="rounded-xl border p-5 mb-8">
+            <h2 className="text-lg font-semibold mb-3">Knowledge Base</h2>
+            <div className="space-y-4">
+              {filtered.map((a) => (
+                <article key={a.id}>
+                  <h3 className="font-medium text-foreground">{a.title}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {(a.excerpt || a.body || "").slice(0, 160)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="grid gap-8 md:grid-cols-2">
           {CATEGORIES.map((cat) => (

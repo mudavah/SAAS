@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiContext } from "@/lib/session";
 import { getSubmissionCounts, getComplianceAnalytics } from "@/lib/compliance/analytics";
+import { listSubmissions } from "@/lib/compliance/engine";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -11,8 +12,11 @@ export async function GET(req: Request) {
   const page = Math.max(1, Number(url.searchParams.get("page") || "1"));
   const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || "20")));
 
-  const counts = await getSubmissionCounts(ctx.organizationId);
-  const analytics = await getComplianceAnalytics(ctx.organizationId, 6);
+  const [counts, analytics, submissions] = await Promise.all([
+    getSubmissionCounts(ctx.organizationId),
+    getComplianceAnalytics(ctx.organizationId, 6),
+    listSubmissions(ctx.organizationId, { status, page, limit }),
+  ]);
 
   return NextResponse.json({
     counts,
@@ -22,5 +26,6 @@ export async function GET(req: Request) {
     trend: analytics.trend,
     simulatedCount: analytics.simulatedCount,
     lastSubmissionAt: analytics.lastSubmissionAt,
+    submissions,
   });
 }

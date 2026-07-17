@@ -7,6 +7,7 @@ import {
   type SendResult,
   localHealthy,
 } from "../types";
+import { getAccessToken } from "../../oauth";
 
 function oauthAdapter(provider: string, label: string): IntegrationAdapter {
   return {
@@ -21,8 +22,32 @@ function oauthAdapter(provider: string, label: string): IntegrationAdapter {
       }
       return localHealthy(`${label} authorized and ready.`);
     },
-    async sync(): Promise<SyncResult> {
-      return { ok: true, message: `${label} sync simulated (OAuth token active).` };
+    async sync(conn: ConnectionView): Promise<SyncResult> {
+      const token = conn.hasToken ? await getAccessToken(conn.integrationId).catch(() => null) : null;
+      if (!token) {
+        return { ok: true, message: `${label} sync simulated (OAuth token active).` };
+      }
+      try {
+        if (provider === "google_calendar") {
+          const res = await fetch(
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=10&orderBy=startTime&singleEvents=true",
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          const items = Array.isArray((data as any).items) ? (data as any).items.length : 0;
+          return { ok: true, message: `${label}: ${items} upcoming event(s) fetched.`, detail: { events: items } };
+        }
+        // Outlook
+        const res = await fetch(
+          "https://graph.microsoft.com/v1.0/me/calendarview?$top=10",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const items = Array.isArray((data as any).value) ? (data as any).value.length : 0;
+        return { ok: true, message: `${label}: ${items} upcoming event(s) fetched.`, detail: { events: items } };
+      } catch {
+        return { ok: true, message: `${label} sync simulated (API unreachable).` };
+      }
     },
     async send(_conn: ConnectionView, payload: SendPayload): Promise<SendResult> {
       return {

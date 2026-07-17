@@ -158,7 +158,9 @@ export type PermissionKey =
   | "enterprise.approvals.manage"
   | "enterprise.approvals.approve"
   | "enterprise.settings.manage"
-  | "enterprise.ai.access";
+  | "enterprise.ai.access"
+  | "enterprise.delegations.manage"
+  | "enterprise.audit.view";
 
 export interface PermissionDef {
   key: PermissionKey;
@@ -341,6 +343,8 @@ export const PERMISSIONS: Record<PermissionKey, PermissionDef> = {
   "enterprise.approvals.approve": { key: "enterprise.approvals.approve", category: "enterprise", name: "Approve Branch Requests", description: "Approve or reject branch-level requests" },
   "enterprise.settings.manage": { key: "enterprise.settings.manage", category: "enterprise", name: "Manage Enterprise Settings", description: "Configure enterprise-level organization settings" },
   "enterprise.ai.access": { key: "enterprise.ai.access", category: "enterprise", name: "Access Enterprise AI", description: "Use AI insights for branch performance and recommendations" },
+  "enterprise.delegations.manage": { key: "enterprise.delegations.manage", category: "enterprise", name: "Manage Delegated Admins", description: "Grant or revoke delegated administration to other members" },
+  "enterprise.audit.view": { key: "enterprise.audit.view", category: "enterprise", name: "View Enterprise Audit Logs", description: "Access the enterprise audit log viewer" },
 };
 
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
@@ -458,6 +462,8 @@ const ENTERPRISE_PERMS: PermissionKey[] = [
   "enterprise.approvals.approve",
   "enterprise.settings.manage",
   "enterprise.ai.access",
+  "enterprise.delegations.manage",
+  "enterprise.audit.view",
 ];
 
 /**

@@ -37,6 +37,7 @@ const GLOBAL_TABLES = new Set([
   "onboardingTips",
   "invoiceItems",
   "paymentWebhookLogs",
+  "integrationMarketplace",
 ]);
 
 function parseTables(src: string): { name: string; body: string }[] {

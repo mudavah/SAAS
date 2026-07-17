@@ -3,9 +3,8 @@ import { db } from "@/db";
 import { etimsInvoices, invoices, etimsConfig } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
-import { logAuditSafe } from "@/lib/audit";
-import { createNotification } from "@/lib/notifications";
 import { logger } from "@/lib/logger";
+import { submitInvoice } from "@/lib/compliance/engine";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "compliance.view");
@@ -63,42 +62,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const mockResponse = {
-      invoiceNumber: `ETIMS-${Date.now()}`,
-      status: "validated",
-      message: "Invoice submitted successfully to KRA",
-    };
-
-    const [etimsRecord] = await db
-      .insert(etimsInvoices)
-      .values({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId!,
-        invoiceId: invoice.id,
-        etimsInvoiceNumber: mockResponse.invoiceNumber,
-        status: "validated",
-        submissionResponse: mockResponse,
-        submittedAt: new Date(),
-      })
-      .returning();
-
-    await logAuditSafe(ctx, {
-      action: "etims_invoice.submit",
-      category: "compliance",
-      resourceType: "etims_invoice",
-      resourceId: etimsRecord.id,
-      description: `Submitted invoice ${invoice.invoiceNumber} to KRA eTIMS`,
-      newValues: { etimsInvoiceNumber: mockResponse.invoiceNumber, status: "validated" },
-    });
-
-    await createNotification({
-      organizationId: ctx.organizationId,
-      category: "compliance",
-      type: "etims_submitted",
-      title: "eTIMS submission",
-      message: `Invoice ${invoice.invoiceNumber} submitted to KRA eTIMS.`,
-      deepLink: "/dashboard/compliance",
-    });
+    // Route through the compliance engine (handles real eTIMS submission with a
+    // graceful simulated fallback when no live credentials are configured).
+    const result = await submitInvoice(ctx, invoice.id);
+    if (!result.ok || !result.record) {
+      return NextResponse.json(
+        { error: result.error ?? "eTIMS submission failed" },
+        { status: 502 }
+      );
+    }
+    const etimsRecord = result.record;
 
     return NextResponse.json(etimsRecord, { status: 201 });
   } catch (error) {

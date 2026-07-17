@@ -10,6 +10,7 @@ import { InstallPrompt } from "@/components/pwa/install-prompt";
 import type { Viewport } from "next";
 import { buildMetadata } from "@/lib/seo/metadata";
 import { SITE_URL } from "@/lib/seo/config";
+import { SiteAnalytics } from "@/components/seo/analytics";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -51,6 +52,9 @@ export const metadata: Metadata = {
   other: {
     "msapplication-TileColor": "#006B3F",
     "mobile-web-app-capable": "yes",
+    ...(process.env.GOOGLE_SITE_VERIFICATION
+      ? { "google-site-verification": process.env.GOOGLE_SITE_VERIFICATION }
+      : {}),
   },
   // Canonical URL + robots sitemap reference (Technical SEO).
   alternates: {
@@ -129,6 +133,7 @@ export default function RootLayout({
         </ThemeProvider>
         <RegisterSW />
         <InstallPrompt />
+        <SiteAnalytics />
       </body>
     </html>
   );

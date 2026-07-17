@@ -29,12 +29,15 @@ import {
   complianceAlerts,
   clients,
   analyticsInsights,
+  enterpriseBranches,
+  branchPerformanceSnapshots,
 } from "@/db/schema";
 import {
   and,
   eq,
   gte,
   lte,
+  desc,
   sql,
   count,
 } from "drizzle-orm";
@@ -961,8 +964,39 @@ export async function getBranchPerformance(
   startDate?: Date,
   endDate?: Date
 ): Promise<BranchPerformance> {
-  // Branch/location scoping is not yet modelled in the schema; return an empty stub.
-  return { branches: [] };
+  // Pull each branch plus its latest performance snapshot, then enrich with a
+  // relative benchmark (share of total org revenue) for comparison.
+  const branches = await db.query.enterpriseBranches.findMany({
+    where: eq(enterpriseBranches.organizationId, organizationId),
+    with: {
+      performanceSnapshots: {
+        orderBy: (t: any) => [desc(t.periodEnd)],
+        limit: 1,
+      },
+    },
+  });
+
+  const enriched = branches.map((b) => {
+    const snap = b.performanceSnapshots?.[0];
+    return {
+      id: b.id,
+      name: b.name,
+      revenue: toNum(snap?.revenue),
+      expenses: toNum(snap?.expenses),
+      profit: toNum(snap?.profit),
+      inventoryValue: toNum(snap?.inventoryValue),
+      salesCount: toNum(snap?.salesCount),
+      employeeCount: toNum(snap?.employeeCount),
+      periodEnd: snap?.periodEnd ?? null,
+    };
+  });
+
+  const totalRevenue = enriched.reduce((s, b) => s + b.revenue, 0) || 1;
+  for (const b of enriched) {
+    (b as any).revenueShare = Math.round((b.revenue / totalRevenue) * 100);
+  }
+
+  return { branches: enriched };
 }
 
 export async function getAiInsights(

@@ -3,6 +3,7 @@ import { Hero } from "@/components/marketing/hero";
 import { Features } from "@/components/marketing/features";
 import { Pricing } from "@/components/marketing/pricing";
 import { Testimonials } from "@/components/marketing/testimonials";
+import { ProductVideos } from "@/components/marketing/videos";
 import { CTA } from "@/components/marketing/cta";
 import { Footer } from "@/components/marketing/footer";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -16,6 +17,7 @@ export default function HomePage() {
       <Hero />
       <Features />
       <Pricing />
+      <ProductVideos />
       <Testimonials />
       <CTA />
       <Footer />

@@ -6,6 +6,7 @@ import {
   connectIntegration,
 } from "@/lib/integrations";
 import { publicIntegration } from "@/lib/integrations/serialize";
+import { bumpMarketplaceInstall } from "@/lib/integrations/marketplace";
 import { IntegrationError } from "@/lib/integrations/core";
 import { logger } from "@/lib/logger";
 
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
       resourceId: created.id,
       description: `Installed ${created.provider} (${created.name}) from marketplace`,
     });
+    await bumpMarketplaceInstall(created.provider).catch(() => undefined);
     return NextResponse.json({ data: publicIntegration(created) }, { status: 201 });
   } catch (error) {
     if (error instanceof IntegrationError) {

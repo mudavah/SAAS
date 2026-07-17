@@ -75,7 +75,8 @@ export async function createCheckoutSession(
   priceId: string,
   userId: string,
   plan: "pro" | "business",
-  organizationId?: string
+  organizationId?: string,
+  opts: { trialDays?: number; coupon?: string } = {}
 ) {
   if (!stripe) {
     throw new Error(
@@ -95,6 +96,10 @@ export async function createCheckoutSession(
     metadata: { userId, plan, organizationId: organizationId ?? "" },
     subscription_data: {
       metadata: { userId, plan, organizationId: organizationId ?? "" },
+      ...(opts.trialDays && opts.trialDays > 0
+        ? { trial_period_days: opts.trialDays }
+        : {}),
+      ...(opts.coupon ? { coupon: opts.coupon } : {}),
     },
   });
 }

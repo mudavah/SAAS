@@ -2302,6 +2302,8 @@ export const subscriptions = pgTable("subscriptions", {
   currentPeriodEnd: timestamp("current_period_end", { mode: "date" }),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
   trialEnd: timestamp("trial_end", { mode: "date" }),
+  gracePeriodEnd: timestamp("grace_period_end", { mode: "date" }),
+  couponId: text("coupon_id").references(() => coupons.id, { onDelete: "set null" }),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
@@ -7834,6 +7836,286 @@ export type PayrollItemType = (typeof payrollItemTypeEnum.enumValues)[number];
 export type SalaryStructureType = (typeof salaryStructureTypeEnum.enumValues)[number];
 export type PensionProviderType = (typeof pensionProviderTypeEnum.enumValues)[number];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Launch Readiness — Subscription lifecycle, Customer Success, Delegated Admin,
+// Integration Marketplace, Compliance submission queue.
+// All additive; new tables are org-scoped and do not alter existing logic.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const launchReadinessEnums = {
+  couponTypeEnum: pgEnum("coupon_type", ["percent", "amount", "trial_days"]),
+  couponStatusEnum: pgEnum("coupon_status", ["active", "inactive", "expired", "depleted"]),
+  subscriptionInvoiceStatusEnum: pgEnum("subscription_invoice_status", [
+    "draft",
+    "open",
+    "paid",
+    "void",
+    "uncollectible",
+  ]),
+  submissionQueueStatusEnum: pgEnum("submission_queue_status", [
+    "queued",
+    "processing",
+    "succeeded",
+    "failed",
+    "cancelled",
+  ]),
+  ticketStatusEnum: pgEnum("ticket_status", [
+    "open",
+    "in_progress",
+    "waiting",
+    "resolved",
+    "closed",
+  ]),
+  ticketPriorityEnum: pgEnum("ticket_priority", ["low", "normal", "high", "urgent"]),
+  featureRequestStatusEnum: pgEnum("feature_request_status", [
+    "planned",
+    "under_review",
+    "in_progress",
+    "shipped",
+    "declined",
+  ]),
+  delegationScopeEnum: pgEnum("delegation_scope", ["organization", "branch"]),
+  delegationStatusEnum: pgEnum("delegation_status", ["active", "revoked", "expired"]),
+  announcementAudienceEnum: pgEnum("announcement_audience", ["all", "plan", "organization"]),
+  marketplaceStatusEnum: pgEnum("marketplace_status", ["available", "installed", "coming_soon"]),
+  campaignStatusEnum: pgEnum("campaign_status", [
+    "draft",
+    "scheduled",
+    "sending",
+    "sent",
+    "failed",
+  ]),
+};
+const {
+  couponTypeEnum,
+  couponStatusEnum,
+  subscriptionInvoiceStatusEnum,
+  submissionQueueStatusEnum,
+  ticketStatusEnum,
+  ticketPriorityEnum,
+  featureRequestStatusEnum,
+  delegationScopeEnum,
+  delegationStatusEnum,
+  announcementAudienceEnum,
+  marketplaceStatusEnum,
+  campaignStatusEnum,
+} = launchReadinessEnums;
+
+// Coupons (discount codes for subscription checkout)
+export const coupons = pgTable("coupons", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
+  name: text("name"),
+  type: couponTypeEnum("type").notNull().default("percent"),
+  value: decimal("value", { precision: 8, scale: 2 }).notNull().default("0"),
+  plan: text("plan"),
+  maxRedemptions: integer("max_redemptions"),
+  redemptionsUsed: integer("redemptions_used").notNull().default(0),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  status: couponStatusEnum("status").notNull().default("active"),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgCodeIdx: uniqueIndex("unique_org_coupon_code").on(table.organizationId, table.code),
+}));
+
+// Subscription invoices (tax invoices for billing)
+export const subscriptionInvoices = pgTable("subscription_invoices", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  subscriptionId: text("subscription_id").references(() => subscriptions.id, { onDelete: "set null" }),
+  provider: text("provider").notNull().default("stripe"),
+  providerInvoiceId: text("provider_invoice_id"),
+  number: text("number").notNull(),
+  periodStart: timestamp("period_start", { mode: "date" }),
+  periodEnd: timestamp("period_end", { mode: "date" }),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+  taxRate: decimal("tax_rate", { precision: 6, scale: 4 }).default("0"),
+  taxAmount: decimal("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  currency: text("currency").notNull().default("KES"),
+  status: subscriptionInvoiceStatusEnum("status").notNull().default("draft"),
+  invoiceUrl: text("invoice_url"),
+  pdfUrl: text("pdf_url"),
+  paidAt: timestamp("paid_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("subscription_invoices_org_idx").on(table.organizationId),
+  providerIdx: index("subscription_invoices_provider_idx").on(table.providerInvoiceId),
+}));
+
+// Compliance submission queue (per-record retry tracking for eTIMS)
+export const etimsSubmissionQueue = pgTable("etims_submission_queue", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  invoiceId: text("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+  etimsInvoiceId: text("etims_invoice_id").references(() => etimsInvoices.id, { onDelete: "set null" }),
+  status: submissionQueueStatusEnum("status").notNull().default("queued"),
+  attempt: integer("attempt").notNull().default(0),
+  maxAttempts: integer("max_attempts").default(5),
+  lastError: text("last_error"),
+  nextRetryAt: timestamp("next_retry_at", { mode: "date" }),
+  response: jsonb("response").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("etims_submission_queue_org_idx").on(table.organizationId),
+  statusIdx: index("etims_submission_queue_status_idx").on(table.status),
+}));
+
+// Delegated administration
+export const enterpriseDelegations = pgTable("enterprise_delegations", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  granterId: text("granter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  delegateId: text("delegate_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  scope: delegationScopeEnum("scope").notNull().default("organization"),
+  branchId: text("branch_id").references(() => enterpriseBranches.id, { onDelete: "set null" }),
+  permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+  status: delegationStatusEnum("status").notNull().default("active"),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  revokedAt: timestamp("revoked_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("enterprise_delegations_org_idx").on(table.organizationId),
+  delegateIdx: index("enterprise_delegations_delegate_idx").on(table.delegateId),
+}));
+
+// Knowledge base articles
+export const knowledgeBaseArticles = pgTable("knowledge_base_articles", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
+  category: text("category").notNull().default("general"),
+  body: text("body").notNull().default(""),
+  excerpt: text("excerpt"),
+  published: boolean("published").notNull().default(true),
+  isGlobal: boolean("is_global").notNull().default(true),
+  views: integer("views").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  globalSlugIdx: uniqueIndex("unique_global_kb_slug").on(table.slug, table.isGlobal),
+}));
+
+// Support tickets
+export const supportTickets = pgTable("support_tickets", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail: text("user_email"),
+  subject: text("subject").notNull(),
+  description: text("description").notNull(),
+  status: ticketStatusEnum("status").notNull().default("open"),
+  priority: ticketPriorityEnum("priority").notNull().default("normal"),
+  category: text("category").default("general"),
+  assigneeId: text("assignee_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("support_tickets_org_idx").on(table.organizationId),
+  statusIdx: index("support_tickets_status_idx").on(table.status),
+}));
+
+// Feature requests
+export const featureRequests = pgTable("feature_requests", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail: text("user_email"),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  status: featureRequestStatusEnum("status").notNull().default("under_review"),
+  votes: integer("votes").notNull().default(1),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+// Customer feedback
+export const customerFeedback = pgTable("customer_feedback", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail: text("user_email"),
+  rating: integer("rating"),
+  message: text("message").notNull(),
+  page: text("page"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("customer_feedback_org_idx").on(table.organizationId),
+}));
+
+// In-app announcements
+export const announcements = pgTable("announcements", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  audience: announcementAudienceEnum("audience").notNull().default("all"),
+  planFilter: text("plan_filter"),
+  dismissible: boolean("dismissible").notNull().default(true),
+  published: boolean("published").notNull().default(true),
+  startsAt: timestamp("starts_at", { mode: "date" }).defaultNow(),
+  endsAt: timestamp("ends_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("announcements_org_idx").on(table.organizationId),
+  statusIdx: index("announcements_published_idx").on(table.published),
+}));
+
+// Integration marketplace catalog (persisted)
+export const integrationMarketplace = pgTable("integration_marketplace", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  provider: text("provider").notNull(),
+  name: text("name").notNull(),
+  category: integrationCategoryEnum("category").notNull(),
+  description: text("description"),
+  authType: integrationAuthTypeEnum("auth_type").notNull().default("api_key"),
+  configFields: jsonb("config_fields").$type<{ key: string; label: string; type: string; required?: boolean; placeholder?: string }[]>().default([]),
+  secretFields: jsonb("secret_fields").$type<{ key: string; label: string; placeholder?: string }[]>().default([]),
+  scopes: jsonb("scopes").$type<string[]>().default([]),
+  capabilities: jsonb("capabilities").$type<string[]>().default([]),
+  status: marketplaceStatusEnum("status").notNull().default("available"),
+  featured: boolean("featured").notNull().default(false),
+  installCount: integer("install_count").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  providerIdx: uniqueIndex("unique_marketplace_provider").on(table.provider),
+}));
+
+// Email campaigns
+export const emailCampaigns = pgTable("email_campaigns", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  preheader: text("preheader"),
+  html: text("html").notNull(),
+  audience: text("audience").notNull().default("all"),
+  status: campaignStatusEnum("status").notNull().default("draft"),
+  scheduledAt: timestamp("scheduled_at", { mode: "date" }),
+  sentAt: timestamp("sent_at", { mode: "date" }),
+  recipientCount: integer("recipient_count").notNull().default(0),
+  openCount: integer("open_count").notNull().default(0),
+  clickCount: integer("click_count").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("email_campaigns_org_idx").on(table.organizationId),
+}));
+
 // Developer Platform types
 export type OauthClient = typeof oauthClients.$inferSelect;
 export type OauthAccessToken = typeof oauthAccessTokens.$inferSelect;
@@ -7900,3 +8182,30 @@ export type IntegrationStatus = (typeof integrationStatusEnum.enumValues)[number
 export type IntegrationAuthType = (typeof integrationAuthTypeEnum.enumValues)[number];
 export type IntegrationHealthStatus = (typeof integrationHealthStatusEnum.enumValues)[number];
 export type IntegrationEventStatus = (typeof integrationEventStatusEnum.enumValues)[number];
+
+// Launch Readiness types
+export type Coupon = typeof coupons.$inferSelect;
+export type SubscriptionInvoice = typeof subscriptionInvoices.$inferSelect;
+export type EtimsSubmissionQueue = typeof etimsSubmissionQueue.$inferSelect;
+export type EnterpriseDelegation = typeof enterpriseDelegations.$inferSelect;
+export type KnowledgeBaseArticle = typeof knowledgeBaseArticles.$inferSelect;
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type FeatureRequest = typeof featureRequests.$inferSelect;
+export type CustomerFeedback = typeof customerFeedback.$inferSelect;
+export type Announcement = typeof announcements.$inferSelect;
+export type IntegrationMarketplaceEntry = typeof integrationMarketplace.$inferSelect;
+export type EmailCampaign = typeof emailCampaigns.$inferSelect;
+
+// Launch Readiness enums (TypeScript unions)
+export type CouponType = (typeof couponTypeEnum.enumValues)[number];
+export type CouponStatus = (typeof couponStatusEnum.enumValues)[number];
+export type SubscriptionInvoiceStatus = (typeof subscriptionInvoiceStatusEnum.enumValues)[number];
+export type SubmissionQueueStatus = (typeof submissionQueueStatusEnum.enumValues)[number];
+export type TicketStatus = (typeof ticketStatusEnum.enumValues)[number];
+export type TicketPriority = (typeof ticketPriorityEnum.enumValues)[number];
+export type FeatureRequestStatus = (typeof featureRequestStatusEnum.enumValues)[number];
+export type DelegationScope = (typeof delegationScopeEnum.enumValues)[number];
+export type DelegationStatus = (typeof delegationStatusEnum.enumValues)[number];
+export type AnnouncementAudience = (typeof announcementAudienceEnum.enumValues)[number];
+export type MarketplaceStatus = (typeof marketplaceStatusEnum.enumValues)[number];
+export type CampaignStatus = (typeof campaignStatusEnum.enumValues)[number];

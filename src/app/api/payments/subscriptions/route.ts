@@ -5,6 +5,11 @@ import { eq, and, desc } from "drizzle-orm";
 import { requireApiContext } from "@/lib/session";
 import { createAuditLog } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import {
+  listSubscriptions,
+  downgradeSubscription,
+  cancelSubscription,
+} from "@/lib/payments/subscriptions";
 
 export async function GET(req: Request) {
   const res = await requireApiContext(req, "subscription.manage");
@@ -63,4 +68,35 @@ export async function POST(req: Request) {
     logger.error("Subscription error:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     return NextResponse.json({ error: "Failed to create subscription" }, { status: 500 });
   }
+}
+
+export async function PATCH(req: Request) {
+  const res = await requireApiContext(req, "subscription.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
+  try {
+    const body = await req.json();
+    if (body.action === "downgrade") {
+      const result = await downgradeSubscription(ctx, body.plan);
+      return NextResponse.json(result);
+    }
+    if (body.action === "cancel") {
+      const result = await cancelSubscription(ctx);
+      return NextResponse.json(result);
+    }
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update subscription" },
+      { status: 400 }
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  const res = await requireApiContext(req, "subscription.manage");
+  if ("error" in res) return res.error;
+  const { ctx } = res;
+  const result = await cancelSubscription(ctx);
+  return NextResponse.json(result);
 }

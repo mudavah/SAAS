@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, CreditCard, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle2, XCircle, Clock, ArrowDownToLine, Ban, ExternalLink } from "lucide-react";
 import { PRICING } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 
@@ -17,6 +17,8 @@ interface Subscription {
   status: string;
   provider: string;
   currentPeriodEnd: string | null;
+  trialEnd: string | null;
+  gracePeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;
 }
@@ -25,8 +27,11 @@ export default function SubscriptionsPage() {
   const { toast } = useToast();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
+  const [taxInvoices, setTaxInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [coupon, setCoupon] = useState("");
+  const [couponMsg, setCouponMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSubscription();
@@ -34,41 +39,102 @@ export default function SubscriptionsPage() {
 
   async function fetchSubscription() {
     try {
-      const res = await fetch("/api/payments/subscriptions");
-      const data = await res.json();
-      setSubscription(data.subscriptions?.[0] || null);
-      setPlan(data.plan || "free");
+      const [subRes, invRes] = await Promise.all([
+        fetch("/api/payments/subscriptions").then((r) => r.json()),
+        fetch("/api/payments/subscriptions/invoices").then((r) => r.json()).catch(() => ({ invoices: [] })),
+      ]);
+      setSubscription(subRes.subscriptions?.[0] || null);
+      setPlan(subRes.plan || "free");
+      setTaxInvoices(invRes.invoices ?? []);
     } catch (error) {
-      logger.error("Failed to fetch subscription:", { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
+      logger.error("Failed to fetch subscription:", { error: error instanceof Error ? error.message : String(error) });
     } finally {
       setLoading(false);
     }
   }
 
   async function handleUpgrade(targetPlan: "pro" | "business") {
-    setUpgrading(targetPlan);
+    setBusy(targetPlan);
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: targetPlan }),
+        body: JSON.stringify({ plan: targetPlan, coupon: coupon || undefined }),
       });
       const data = await res.json();
-
       if (!res.ok) {
-        toast({
-          title: "Could not start checkout",
-          description: data.error || "Something went wrong.",
-          variant: "destructive",
-        });
+        toast({ title: "Could not start checkout", description: data.error || "Something went wrong.", variant: "destructive" });
         return;
       }
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setBusy(null);
+    }
+  }
 
-      if (data.url) {
-        window.location.href = data.url;
+  async function handleDowngrade(targetPlan: "pro" | "free") {
+    setBusy(`downgrade-${targetPlan}`);
+    try {
+      const res = await fetch("/api/payments/subscriptions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "downgrade", plan: targetPlan }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Downgrade failed", description: data.error || "Something went wrong.", variant: "destructive" });
+      } else {
+        toast({ title: "Downgrade scheduled", description: `You'll move to ${targetPlan} at period end.` });
+        fetchSubscription();
       }
     } finally {
-      setUpgrading(null);
+      setBusy(null);
+    }
+  }
+
+  async function handleCancel() {
+    setBusy("cancel");
+    try {
+      const res = await fetch("/api/payments/subscriptions", {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Cancel failed", description: data.error || "Something went wrong.", variant: "destructive" });
+      } else {
+        toast({ title: "Subscription cancelled", description: "It stays active until period end." });
+        fetchSubscription();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openPortal() {
+    setBusy("portal");
+    try {
+      const res = await fetch("/api/payments/subscriptions/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else toast({ title: "Billing portal unavailable", description: data.error, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function validateCoupon() {
+    if (!coupon) return;
+    setBusy("coupon");
+    try {
+      const res = await fetch("/api/payments/subscriptions/coupons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "validate", code: coupon, plan: plan === "free" ? "pro" : plan }),
+      });
+      const data = await res.json();
+      setCouponMsg(res.ok ? `Coupon applied: ${data.coupon.code} (${data.coupon.type} ${data.coupon.value})` : data.error);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -79,12 +145,14 @@ export default function SubscriptionsPage() {
     past_due: <Clock className="h-5 w-5 text-yellow-500" />,
   };
 
+  const isPaid = plan === "pro" || plan === "business";
+
   return (
     <DashboardShell>
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Subscriptions</h1>
-          <p className="text-muted-foreground">Manage your subscription and billing</p>
+          <p className="text-muted-foreground">Manage your subscription, coupons, and billing</p>
         </div>
 
         {loading ? (
@@ -115,6 +183,21 @@ export default function SubscriptionsPage() {
                     Current period ends: {formatDate(subscription.currentPeriodEnd)}
                   </p>
                 )}
+                {subscription?.trialEnd && new Date(subscription.trialEnd) > new Date() && (
+                  <p className="text-sm text-blue-600 mt-1">Trial ends: {formatDate(subscription.trialEnd)}</p>
+                )}
+                {subscription?.gracePeriodEnd && (
+                  <p className="text-sm text-yellow-600 mt-1">Grace period until: {formatDate(subscription.gracePeriodEnd)}</p>
+                )}
+                {subscription?.cancelAtPeriodEnd && (
+                  <Badge variant="secondary" className="mt-2">Cancels at period end</Badge>
+                )}
+                <div className="mt-3">
+                  <Button variant="outline" size="sm" onClick={openPortal} disabled={busy === "portal" || !isPaid}>
+                    {busy === "portal" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <ExternalLink className="mr-2 h-4 w-4" /> Billing Portal
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -129,38 +212,96 @@ export default function SubscriptionsPage() {
                     {(["pro", "business"] as const).map((p) => (
                       <div
                         key={p}
-                        className={`border rounded-lg p-4 ${
-                          (plan as string) === p ? "border-kazi-green bg-kazi-green/5" : ""
-                        }`}
+                        className={`border rounded-lg p-4 ${plan === (p as "free" | "pro" | "business") ? "border-kazi-green bg-kazi-green/5" : ""}`}
                       >
                         <h3 className="font-semibold">{PRICING[p].name}</h3>
                         <p className="text-2xl font-bold mt-1">
                           KSh {PRICING[p].price.toLocaleString()}
                           <span className="text-sm font-normal text-muted-foreground">/mo</span>
                         </p>
-                        {(plan as string) === p ? (
+                        {plan === (p as "free" | "pro" | "business") ? (
                           <Badge variant="success" className="mt-3">Current Plan</Badge>
                         ) : (
                           <Button
                             variant="kazi"
                             size="sm"
                             className="mt-3 w-full"
-                            disabled={upgrading === p}
+                            disabled={busy === p}
                             onClick={() => handleUpgrade(p)}
                           >
-                            {upgrading === p && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {busy === p && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Upgrade to {PRICING[p].name}
                           </Button>
                         )}
                       </div>
                     ))}
                   </div>
+                  <div className="mt-4 flex gap-2">
+                    <input
+                      value={coupon}
+                      onChange={(e) => setCoupon(e.target.value)}
+                      placeholder="Coupon code"
+                      className="flex-1 border rounded-md px-3 py-2 bg-background text-sm"
+                    />
+                    <Button variant="outline" size="sm" onClick={validateCoupon} disabled={busy === "coupon"}>
+                      Apply
+                    </Button>
+                  </div>
+                  {couponMsg && <p className="text-xs text-muted-foreground mt-2">{couponMsg}</p>}
                   <p className="text-xs text-muted-foreground text-center mt-4">
                     Secure card payments processed by Stripe. Cancel anytime.
                   </p>
                 </CardContent>
               </Card>
             )}
+
+            {isPaid && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Manage Plan</CardTitle>
+                  <CardDescription>Downgrade or cancel your subscription</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {plan === "business" && (
+                    <Button variant="outline" className="w-full" onClick={() => handleDowngrade("pro")} disabled={busy === "downgrade-pro"}>
+                      <ArrowDownToLine className="mr-2 h-4 w-4" /> Downgrade to Pro
+                    </Button>
+                  )}
+                  <Button variant="outline" className="w-full" onClick={() => handleDowngrade("free")} disabled={busy === "downgrade-free"}>
+                      <ArrowDownToLine className="mr-2 h-4 w-4" /> Downgrade to Free
+                    </Button>
+                  <Button variant="destructive" className="w-full" onClick={handleCancel} disabled={busy === "cancel" || subscription?.cancelAtPeriodEnd}>
+                    <Ban className="mr-2 h-4 w-4" /> Cancel Subscription
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Tax Invoices</CardTitle>
+                <CardDescription>Subscription billing records</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {taxInvoices.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No tax invoices yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {taxInvoices.map((inv: any) => (
+                      <div key={inv.id} className="flex items-center justify-between border-b pb-2 text-sm">
+                        <div>
+                          <div className="font-medium">{inv.number}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {inv.total} {inv.currency} · {inv.status}
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{formatDate(inv.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
       </div>

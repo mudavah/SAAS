@@ -41,6 +41,11 @@ import { signOut, useSession } from "next-auth/react";
     MessageSquare,
     History,
     GitBranch,
+    LineChart,
+    UserCog,
+    ScrollText,
+    Megaphone,
+    LifeBuoy,
   } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -93,6 +98,13 @@ const navItems = [
   { href: "/dashboard/payroll/reports", label: "Payroll Reports", icon: BarChart3 },
   { href: "/dashboard/payroll/portal", label: "My Payslips", icon: UserCircle },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone },
+  { href: "/dashboard/support", label: "Support & Feedback", icon: LifeBuoy },
+  {
+    href: "/dashboard/marketing/campaigns",
+    label: "Email Campaigns",
+    icon: Megaphone,
+  },
   { href: "/dashboard/audit", label: "Audit Logs", icon: FileSearch },
   {
     href: "/dashboard/enterprise",
@@ -125,6 +137,21 @@ const navItems = [
     href: "/dashboard/enterprise/settings",
     label: "Enterprise Settings",
     icon: Settings,
+  },
+  {
+    href: "/dashboard/enterprise/benchmarks",
+    label: "Branch Benchmarking",
+    icon: LineChart,
+  },
+  {
+    href: "/dashboard/enterprise/delegations",
+    label: "Delegated Admins",
+    icon: UserCog,
+  },
+  {
+    href: "/dashboard/enterprise/audit",
+    label: "Enterprise Audit",
+    icon: ScrollText,
   },
 ];
 

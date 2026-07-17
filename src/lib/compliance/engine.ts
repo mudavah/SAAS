@@ -11,6 +11,7 @@ import {
   etimsConfig,
   etimsInvoices,
   etimsComplianceLogs,
+  etimsSubmissionQueue,
   invoices,
   type ComplianceHealthScore,
 } from "@/db/schema";
@@ -457,4 +458,116 @@ export async function retryFailedSubmissions(
     results.push({ id: rec.id, ok: res.ok, error: res.error });
   }
   return results;
+}
+
+/** Paginated list of eTIMS submission queue records (with invoice + etims meta). */
+export async function listSubmissions(
+  organizationId: string,
+  opts: { status?: string; page?: number; limit?: number } = {}
+): Promise<{
+  rows: Array<{
+    id: string;
+    invoiceId: string | null;
+    invoiceNumber: string | null;
+    etimsInvoiceId: string | null;
+    etimsInvoiceNumber: string | null;
+    status: string;
+    attempt: number;
+    maxAttempts: number | null;
+    lastError: string | null;
+    nextRetryAt: Date | null;
+    submittedAt: Date | null;
+    createdAt: Date;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
+}> {
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(50, Math.max(1, opts.limit ?? 20));
+  const offset = (page - 1) * limit;
+
+  const where = opts.status
+    ? and(
+        eq(etimsInvoices.organizationId, organizationId),
+        eq(etimsInvoices.status, opts.status as never)
+      )
+    : eq(etimsInvoices.organizationId, organizationId);
+
+  const [rows, totalRows] = await Promise.all([
+    db.query.etimsInvoices.findMany({
+      where,
+      orderBy: (t, { desc }) => [desc(t.createdAt)],
+      limit,
+      offset,
+      with: { invoice: true },
+    }),
+    db.$count(etimsInvoices, where),
+  ]);
+
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      invoiceId: r.invoiceId,
+      invoiceNumber: (r.invoice as { invoiceNumber?: string } | undefined)?.invoiceNumber ?? null,
+      etimsInvoiceId: r.id,
+      etimsInvoiceNumber: r.etimsInvoiceNumber ?? null,
+      status: r.status,
+      attempt:
+        Number((r.submissionResponse as Record<string, unknown> | null)?.attempt ?? 1) || 1,
+      maxAttempts: null,
+      lastError:
+        (r.submissionResponse as Record<string, unknown> | null)?.errorMessage != null
+          ? String((r.submissionResponse as Record<string, unknown>).errorMessage)
+          : null,
+      nextRetryAt: null,
+      submittedAt: r.submittedAt,
+      createdAt: r.createdAt,
+    })),
+    total: totalRows,
+    page,
+    limit,
+  };
+}
+
+/** Retry a single failed/queued submission by its eTIMS invoice record id. */
+export async function retrySubmission(
+  ctx: ServerContext,
+  recordId: string
+): Promise<{ ok: boolean; error?: string; recordId: string }> {
+  const organizationId = ctx.organizationId;
+  const rec = await db.query.etimsInvoices.findFirst({
+    where: and(
+      eq(etimsInvoices.id, recordId),
+      eq(etimsInvoices.organizationId, organizationId)
+    ),
+  });
+  if (!rec) return { ok: false, error: "Submission record not found.", recordId };
+
+  const prevAttempt =
+    Number((rec.submissionResponse as Record<string, unknown> | null)?.attempt ?? 1) || 1;
+  const res = await submitInvoice(ctx, rec.invoiceId, {
+    existingRecordId: rec.id,
+    attempt: prevAttempt + 1,
+  });
+  return { ok: res.ok, error: res.error, recordId };
+}
+
+/** Touch the submission queue table so a record exists for tracking/observability. */
+export async function enqueueSubmission(
+  ctx: ServerContext,
+  input: { invoiceId: string; etimsInvoiceId?: string; maxAttempts?: number }
+): Promise<void> {
+  await db
+    .insert(etimsSubmissionQueue)
+    .values({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId ?? null,
+      invoiceId: input.invoiceId,
+      etimsInvoiceId: input.etimsInvoiceId ?? null,
+      status: "queued",
+      attempt: 0,
+      maxAttempts: input.maxAttempts ?? 5,
+    })
+    .catch(() => undefined);
 }

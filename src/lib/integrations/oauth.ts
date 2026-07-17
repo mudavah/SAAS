@@ -54,6 +54,12 @@ const OAUTH_PROVIDERS: Record<string, ProviderOAuth> = {
     authorizeUrl: "https://login.xero.com/identity/connect/authorize",
     tokenUrl: "https://identity.xero.com/connect/token",
   },
+  whatsapp: {
+    authorizeUrl: "https://www.facebook.com/v19.0/dialog/oauth",
+    tokenUrl: "https://graph.facebook.com/v19.0/oauth/access_token",
+    envClientId: "WHATSAPP_APP_ID",
+    envClientSecret: "WHATSAPP_APP_SECRET",
+  },
 };
 
 export function isOAuthProvider(provider: string): boolean {

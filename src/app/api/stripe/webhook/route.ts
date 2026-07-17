@@ -8,6 +8,7 @@ import { stripe, planFromPriceId } from "@/lib/stripe";
 import { processWebhook, verifyPayment } from "@/lib/payments/engine";
 import { createAuditLog } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications";
+import { handleFailedPayment, downgradeSubscription } from "@/lib/payments/subscriptions";
 import type Stripe from "stripe";
 import type { PlanType } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -173,6 +174,51 @@ export async function POST(req: Request) {
               });
             }
           }
+        }
+        break;
+      }
+
+      case "customer.subscription.paused":
+      case "customer.subscription.resumed": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const organizationId = subscription.metadata?.organizationId;
+        if (organizationId) {
+          await db
+            .update(organizations)
+            .set({ updatedAt: new Date() })
+            .where(eq(organizations.id, organizationId));
+        }
+        break;
+      }
+
+      case "customer.subscription.trial_will_end": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const organizationId = subscription.metadata?.organizationId;
+        const userId = subscription.metadata?.userId;
+        if (organizationId) {
+          await createNotification({
+            organizationId,
+            category: "subscriptions",
+            type: "trial_ending",
+            title: "Your trial is ending soon",
+            message: "Add a payment method to keep your plan active after the trial ends.",
+            deepLink: "/dashboard/payments/subscriptions",
+          });
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscription = invoice.subscription as string | undefined;
+        const sub = subscription
+          ? await (stripe?.subscriptions.retrieve(subscription).catch(() => null) ?? null)
+          : null;
+        const organizationId = (sub as any)?.metadata?.organizationId as string | undefined;
+        const userId = (sub as any)?.metadata?.userId as string | undefined;
+        if (organizationId) {
+          const ctx = { organizationId, userId: userId ?? null, permissions: [] as string[] };
+          await handleFailedPayment(ctx as any).catch(() => undefined);
         }
         break;
       }

@@ -15,4 +15,5 @@ export * from "./approvals";
 export * from "./reports";
 export * from "./ai";
 export * from "./settings";
+export * from "./delegations";
 export { EnterpriseError } from "./core";
