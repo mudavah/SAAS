@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
  * SSR-safe localStorage state hook. Reads lazily after mount so server and
@@ -10,20 +10,19 @@ import { useCallback, useState } from "react";
 export function useLocalStorage<T>(key: string, initialValue: T) {
   const [state, setState] = useState<T>(initialValue);
 
-  // Hydrate from storage on the client only.
-  const [hydrated, setHydrated] = useState(false);
-  if (typeof window !== "undefined" && !hydrated) {
+  // Hydrate from storage on the client only, after mount. All state updates
+  // happen inside the effect so no update occurs during render.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
       const raw = window.localStorage.getItem(key);
       if (raw !== null) {
-        // Defer setState to avoid setting during render.
-        queueMicrotask(() => setState(JSON.parse(raw) as T));
+        setState(JSON.parse(raw) as T);
       }
     } catch {
       /* ignore corrupt/blocked storage */
     }
-    queueMicrotask(() => setHydrated(true));
-  }
+  }, [key]);
 
   const set = useCallback(
     (value: T | ((prev: T) => T)) => {
